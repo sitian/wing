@@ -19,9 +19,9 @@
 
 import sys
 sys.path.append('../../lib')
-from privacy import *
-from default import *
-import iface
+from default import DEFAULT_HOST, NET_ADAPTER
+from privacy import PUBLIC, PRIVATE
+import net
 
 class WHubHost(object):
     @property
@@ -32,7 +32,7 @@ class WHubHost(object):
         if PRIVATE == privacy:
             return DEFAULT_HOST
         else:
-            return iface.chkaddr(NET_ADAPTER)
+            return net.chkiface(NET_ADAPTER)
     
     def release(self, host):
         pass

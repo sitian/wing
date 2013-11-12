@@ -20,7 +20,7 @@
 import struct
 import socket
 import device
-from dev.net import Net
+from dev.network import Network
 from dev.storage import Storage
 from dev.monitor import Monitor
 from dev.container import Container
@@ -28,14 +28,13 @@ from host import WHubHost
 
 import sys
 sys.path.append('../../lib')
-from stream import pack, unpack
+from default import DEFAULT_HOST, NET_ADAPTER
+from privacy import PUBLIC, PRIVATE
 from log import log, log_err
 from wview import WView
 from wctrl import WCtrl
 from whub import WHub
-from privacy import *
-from default import *
-import iface
+import net
 
 WHUB_CONN_TIMEOUT = 30 # Seconds
 
@@ -48,11 +47,11 @@ class WHubConnector(object):
     
     def is_active(self, guest, name, privacy, host):
         real = self._get_real_name(guest)
-        return device.STATE_ACTIVE == Net().state(real, privacy, host)
+        return device.STATE_ACTIVE == Network().state(real, privacy, host)
     
     def _add_dev(self, host, dev, name):
         try:
-            if DEFAULT_HOST == host or iface.chkaddr(NET_ADAPTER) == host:
+            if DEFAULT_HOST == host or net.chkiface(NET_ADAPTER) == host:
                 res = dev.register(name)
                 if res:
                     res = dev.mount(name)
@@ -71,7 +70,7 @@ class WHubConnector(object):
     
     def _remove_dev(self, host, dev, name):
         try:
-            if DEFAULT_HOST == host or iface.chkaddr(NET_ADAPTER) == host:
+            if DEFAULT_HOST == host or net.chkiface(NET_ADAPTER) == host:
                 res = dev.unmount(name)
                 if res:
                     res = dev.unregister(name)
@@ -102,10 +101,10 @@ class WHubConnector(object):
           
     def _connect(self, guest, name, secret, privacy, host):
         try:
-            dev = Net()
+            dev = Network()
             if not dev.register(name, secret, privacy, host):
                 return
-            if PRIVATE == privacy or iface.chkaddr(NET_ADAPTER) == host:
+            if PRIVATE == privacy or net.chkiface(NET_ADAPTER) == host:
                 if not dev.mount(guest, name, secret):
                     dev.unregister(name, secret, privacy, host)
                     return
@@ -148,10 +147,10 @@ class WHubConnector(object):
     
     def _disconnect(self, name, secret, privacy, host):
         try:
-            dev = Net()
+            dev = Network()
             if not dev.unregister(name, secret, privacy, host):
                 return
-            if PRIVATE == privacy or iface.chkaddr(NET_ADAPTER) == host:
+            if PRIVATE == privacy or net.chkiface(NET_ADAPTER) == host:
                 dev.unmount(name)
             else:
                 WHub(host, dev).unmount(name)
@@ -175,7 +174,7 @@ if __name__ == '__main__':
     view = WView()
     privacy = PRIVATE
     connector = WHubConnector()
-    guest = iface.chkaddr(NET_ADAPTER)
+    guest = net.chkiface(NET_ADAPTER)
     
     while True:
         res = view.connector.enter()

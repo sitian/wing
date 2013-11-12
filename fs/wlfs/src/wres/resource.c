@@ -163,7 +163,7 @@ int wres_save_peer(wres_desc_t *desc)
 	}
 	resource.key = desc->id;
 	resource.cls = WRES_CLS_TSK;
-	return wres_cache_write(&resource, desc, sizeof(wres_desc_t));
+	return wres_cache_write(&resource, (char *)desc, sizeof(wres_desc_t));
 }
 
 
@@ -216,7 +216,7 @@ int wres_new(wresource_t *resource)
 	wres_resource_to_path(resource, path);
 	ret = wres_mds_write(path, (char *)&desc, sizeof(wres_desc_t));
 	if (!ret)
-		ret = wres_cache_write(resource, &desc, sizeof(wres_desc_t));
+		ret = wres_cache_write(resource, (char *)&desc, sizeof(wres_desc_t));
 	return ret;
 }
 

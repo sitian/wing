@@ -20,8 +20,8 @@
 import os
 import fcntl
 import struct
-from util.wdump import *
 from control import WControl
+from util.wdump import WDUMP_DEV, WDUMP_KILL, WDUMP_IOCTL_CHECKPOINT
 
 class Checkpoint(WControl):
 	def save(self, pid):

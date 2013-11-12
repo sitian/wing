@@ -26,8 +26,7 @@ from commands import getstatusoutput
 
 import sys
 sys.path.append('../../lib')
-from default import *
-from wmon import *
+from wmon import WMon, WMON_HEARTBEAT_MIN
 
 STAT_RUN = 1
 STAT_STOP = 2

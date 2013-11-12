@@ -22,7 +22,7 @@ from threading import Thread
 
 import sys
 sys.path.append('../../lib')
-from stream import pack
+from stream import stream_input
 
 class WViewer(Thread):
     def __init__(self, window):
@@ -55,7 +55,7 @@ class WViewer(Thread):
                     res = func(*self._args)
                 else:
                     res = func()
-                self._sock.send(pack(res))
+                stream_input(self._sock, res)
             finally:
                 self._sock.close()
                 self._sock = None

@@ -25,9 +25,9 @@ from threading import Thread
 
 import sys
 sys.path.append('../../lib')
-from stream import pack, unpack
+from stream import stream_input, stream_output
+from default import WMON_PORT
 from log import log_err
-from default import *
 
 class WMond(Thread):
     def _add_trig(self, trig):
@@ -37,16 +37,16 @@ class WMond(Thread):
     def _init_trig(self):
         self._add_trig(Heartbeat())
         
-    def _init_srv(self):
+    def _init_srv(self, addr):
         self._srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._srv.bind((WMON_ADDR, WMON_PORT))
+        self._srv.bind((addr, WMON_PORT))
         self._srv.listen(5)
         
-    def __init__(self):
+    def __init__(self, addr):
         Thread.__init__(self)
         self._triggers = {}
         self._init_trig()
-        self._init_srv()
+        self._init_srv(addr)
     
     @property
     def name(self):
@@ -57,7 +57,7 @@ class WMond(Thread):
         async = pool.apply_async(trig.proc, (op, args))
         try:
             res = async.get(timeout)
-            sock.send(pack(res))
+            stream_input(sock, res)
         except TimeoutError:
             log_err('%s: failed to process (timeout)' % self.name)
             pool.terminate()
@@ -69,7 +69,7 @@ class WMond(Thread):
             try:
                 sock = None
                 sock = self._srv.accept()[0]
-                req = unpack(sock)
+                req = stream_output(sock)
                 try:
                     op = req['op']
                     args = req['args']
@@ -86,7 +86,10 @@ class WMond(Thread):
                     sock.close()
     
 if __name__ == '__main__':
-    mond = WMond()
+    if len(sys.argv) != 2:
+        sys.exit(0)
+    addr = sys.argv[1]
+    mond = WMond(addr)
     mond.start()
     mond.join()
     

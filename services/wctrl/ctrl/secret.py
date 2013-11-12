@@ -23,8 +23,8 @@ from control import WControl
 
 import sys
 sys.path.append('../../lib')
+from pack import pack, unpack
 from db import TempDB
-import stream
 
 PASSWORD_LENGTH = 8
 
@@ -41,10 +41,10 @@ class Secret(WControl):
         query = {'username':name}
         update = {'$set':{'password':password}}
         self._db.update(query, update)
-        return stream.cat(name, password)
+        return pack(name, password)
     
     def delete(self, secret):
-        name, password = stream.split(secret)
+        name, password = unpack(secret)
         query = {'username':name}
         self._db.remove(query)
         return True

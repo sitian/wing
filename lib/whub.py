@@ -20,7 +20,7 @@
 import socket
 from log import log_err
 from default import WHUB_PORT
-from stream import pack, unpack
+from stream import stream_input, stream_output
 
 class WHub(object):
     def _is_valid_addr(self, addr):
@@ -52,11 +52,11 @@ class WHub(object):
             
     def _send(self, buf):
         if self._sock:
-            self._sock.send(pack(buf))
+            stream_input(self._sock, buf)
         
     def _recv(self):
         if self._sock:
-            return unpack(self._sock)
+            return stream_output(self._sock)
     
     def _proc(self, *args):
         try:

@@ -19,7 +19,7 @@
 
 import struct
 import socket
-from dev.net import Net
+from dev.network import Network
 from dev.storage import Storage
 from dev.container import Container
 from multiprocessing.pool import ThreadPool
@@ -30,11 +30,10 @@ from auth import WHubAuth
 
 import sys
 sys.path.append('../../lib')
-from stream import pack, unpack
+from stream import stream_input, stream_output
+from default import NET_ADAPTER, WHUB_PORT
 from log import log, log_err
-from privacy import *
-from default import *
-import iface
+import net
 
 WHUB_NR_LOCKS = 1024
 
@@ -44,12 +43,12 @@ class WHubd(object):
         
     def _init_dev(self):
         self._dev = {}
-        self._add_dev(Net())
+        self._add_dev(Network())
         self._add_dev(Storage())
         self._add_dev(Container())
         
     def _init_srv(self):
-        addr = iface.chkaddr(NET_ADAPTER)
+        addr = net.chkiface(NET_ADAPTER)
         self._srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._srv.bind((addr, WHUB_PORT))
         self._srv.listen(5)
@@ -62,13 +61,6 @@ class WHubd(object):
         self._locks = []
         for i in range(0, WHUB_NR_LOCKS):
             self._locks.append(Lock())
-    
-    def _is_valid_addr(self, addr):
-        try:
-            socket.inet_aton(addr)
-            return True
-        except socket.error:
-            return False
 
     def _lock_get(self, addr):
         val = struct.unpack('!I', socket.inet_aton(addr))[0]
@@ -87,7 +79,7 @@ class WHubd(object):
         return self.__class__.__name__
     
     def enter(self, guest, name, secret, password, privacy):
-        if not self._is_valid_addr(guest):
+        if not net.validate(guest):
             log_err('%s: failed, invalid addr' % self.name)
             return
         res = None
@@ -100,7 +92,7 @@ class WHubd(object):
         return res
     
     def exit(self, guest, name, secret, password, privacy, host):
-        if not self._is_valid_addr(guest):
+        if not net.validate(guest):
             log_err('%s: failed, invalid addr' % self.name)
             return
         res = None
@@ -131,7 +123,7 @@ class WHubd(object):
                     res = self.enter(*args)
                 elif op == 'exit':
                     res = self.exit(*args)
-            sock.send(pack(res))
+            stream_input(sock, res)
         finally:
             sock.close()
             
@@ -141,7 +133,7 @@ class WHubd(object):
             try:
                 sock = None
                 sock = self._srv.accept()[0]
-                req = unpack(sock)
+                req = stream_output(sock)
                 try:
                     op = req['op']
                     args = req['args']

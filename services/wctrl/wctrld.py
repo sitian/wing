@@ -28,20 +28,18 @@ from threading import Thread
 
 import sys
 sys.path.append('../../lib')
-from stream import pack, unpack
 from log import log_err
-from default import *
-import iface
+from default import WCTRL_PORT, LOCAL_HOST
+from stream import stream_input, stream_output
 
 class WCtrld(Thread):
-	def _add_ctrl(self, ctrl):
+	def add_ctrl(self, ctrl):
 		self._ctrls.update({ctrl.name:ctrl})
 	
-	def _init_ctrl(self):
-		pass
-	
-	def _init_srv(self):
-		pass
+	def _init_srv(self, addr):
+		self._srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self._srv.bind((addr, WCTRL_PORT))
+		self._srv.listen(5)
 		
 	def __init__(self):
 		Thread.__init__(self)
@@ -58,7 +56,7 @@ class WCtrld(Thread):
 		async = pool.apply_async(ctrl.proc, (op, args))
 		try:
 			res = async.get(timeout)
-			sock.send(pack(res))
+			stream_input(sock, res)
 		except TimeoutError:
 			log_err('%s: failed to process (timeout)' % self.name)
 			pool.terminate()
@@ -70,7 +68,7 @@ class WCtrld(Thread):
 			try:
 				sock = None
 				sock = self._srv.accept()[0]
-				req = unpack(sock)
+				req = stream_output(sock)
 				try:
 					op = req['op']
 					args = req['args']
@@ -85,34 +83,25 @@ class WCtrld(Thread):
 			except:
 				if sock:
 					sock.close()
-
-class WCtrldRemote(WCtrld):
-	def _init_ctrl(self):
-		self._add_ctrl(Auth())
-		self._add_ctrl(Checkpoint())
-	
-	def _init_srv(self):
-		addr = iface.chkaddr(NET_ADAPTER)
-		self._srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self._srv.bind((addr, WCTRL_PORT))
-		self._srv.listen(5)
-		
-class WCtrldLocal(WCtrld):
-	def _init_ctrl(self):
-		self._add_ctrl(Auth())
-		self._add_ctrl(Secret())
-		self._add_ctrl(Checkpoint())
-		self._add_ctrl(Heartbeat())
-		
-	def _init_srv(self):
-		self._srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self._srv.bind(('127.0.0.1', WCTRL_PORT))
-		self._srv.listen(5)
 		
 if __name__ == '__main__':
-	local = WCtrldLocal()
-	remote = WCtrldRemote()
-	local.start()
-	remote.start()
-	local.join()
-	remote.join()
+	if len(sys.argv) < 2:
+		sys.exit(0)
+	
+	if sys.argv[1] == '-l':
+		local = WCtrld(LOCAL_HOST)
+		local.add_ctrl(Auth())
+		local.add_ctrl(Checkpoint())
+		local.start()
+		local.join()
+	elif sys.argv[1] == '-r':
+		if len(sys.argv) != 3:
+			sys.exit(0)
+		addr = sys.argv[2]
+		remote = WCtrld(addr)
+		remote.add_ctrl(Auth())
+		remote.add_ctrl(Secret())
+		remote.add_ctrl(Heartbeat())
+		remote.add_ctrl(Checkpoint())
+		remote.start()
+		remote.join()

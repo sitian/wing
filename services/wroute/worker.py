@@ -34,7 +34,7 @@ from multiprocessing.pool import ThreadPool
 
 import sys
 sys.path.append('../../lib')
-from default import ROUTER_BACKEND_ADDR
+from default import WROUTE_BACKEND_ADDR
 from log import log_err
 
 class WRouteWorker(Thread):    
@@ -46,7 +46,7 @@ class WRouteWorker(Thread):
         self._sock = self._context.socket(zmq.DEALER)
         self._sock.setsockopt(zmq.IDENTITY, self._id)
         self._poller.register(self._sock, zmq.POLLIN)
-        self._sock.connect(ROUTER_BACKEND_ADDR)
+        self._sock.connect(WROUTE_BACKEND_ADDR)
         self._sock.send(PPP_READY)
     
     def _reset_sock(self):

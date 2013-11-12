@@ -21,9 +21,9 @@ from control import WControl
 
 import sys
 sys.path.append('../../lib')
+from privacy import PRIVATE, PUBLIC
 from default import DB_ADDR
 from db import MainDB
-from privacy import *
 
 class Auth(WControl):     
     def login(self, name, secret, privacy, host):

@@ -1,4 +1,4 @@
-#      wrouted.py
+#      net.py
 #      
 #      Copyright (C) 2013 Yi-Wei Ci <ciyiwei@hotmail.com>
 #      
@@ -17,20 +17,28 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-from poller import WRoutePoller
-from worker import WRouteWorker
+import fcntl
+import struct
+import socket
 
-import sys
-sys.path.append('../../lib')
-from default import WROUTE_ROLE
+def chkiface(name):
+    addr = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        addr = socket.inet_ntoa(fcntl.ioctl(sock.fileno(), 0x8915, struct.pack('256s', name))[20:24])
+    finally:
+        return addr
+    
+def aton(addr):
+    return struct.unpack('I', socket.inet_aton(addr))[0]
 
-if __name__ == '__main__':
-    if WROUTE_ROLE != 1:
-        poller = WRoutePoller()
-        poller.run()
-    if WROUTE_ROLE != 0:
-        worker = WRouteWorker()
-        worker.start()
-        worker.join()
-    if WROUTE_ROLE != 1:
-        poller.join()
+def ntoa(addr):
+    return socket.inet_ntoa(struct.pack('I', addr)) 
+
+def validate(addr):
+    ret = False
+    try:
+        if addr and aton(addr):
+            ret = True
+    finally:
+        return ret

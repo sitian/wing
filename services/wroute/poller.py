@@ -29,16 +29,16 @@ from threading import Thread
 
 import sys
 sys.path.append('../../lib')
+from default import WROUTE_ADDR, WROUTE_BACKEND_ADDR
 from log import log_err
-from cfg import *
 
 class WRoutePoller(Thread):
     def _init_sock(self):
         self._context = zmq.Context(1)
         self._frontend = self._context.socket(zmq.ROUTER)
         self._backend = self._context.socket(zmq.ROUTER)
-        self._frontend.bind(ROUTER_FRONTEND_ADDR)
-        self._backend.bind(ROUTER_BACKEND_ADDR)
+        self._frontend.bind(WROUTE_ADDR)
+        self._backend.bind(WROUTE_BACKEND_ADDR)
         self._poller_backend = zmq.Poller()
         self._poller_backend.register(self._backend, zmq.POLLIN)
         self._poller = zmq.Poller()

@@ -26,8 +26,8 @@ from viewer import WViewer
 
 import sys
 sys.path.append('../../lib')
-from stream import pack, unpack
-from default import *
+from stream import stream_output
+from default import WVIEW_PORT, LOCAL_HOST
     
 class WViewd(Thread):
     def _init_viewers(self):
@@ -45,7 +45,7 @@ class WViewd(Thread):
             
     def __init__(self, addr=None):
         if not addr:
-            addr = '127.0.0.1'
+            addr = LOCAL_HOST
         Thread.__init__(self)
         self._init_viewers()
         self._init_srv(addr)
@@ -55,7 +55,7 @@ class WViewd(Thread):
             try:
                 sock = None
                 sock = self._srv.accept()[0]
-                req = unpack(sock)
+                req = stream_output(sock)
                 try:
                     viewer = self._viewers[req['viewer']]
                     op = req['op']

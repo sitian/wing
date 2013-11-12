@@ -1,4 +1,4 @@
-#      auth.py
+#      sim.py
 #      
 #      Copyright (C) 2013 Yi-Wei Ci <ciyiwei@hotmail.com>
 #      
@@ -17,36 +17,37 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-from connector import WHubConnector
+from rep import WMDRep
 
 import sys
 sys.path.append('../../lib')
-from default import DEFAULT_HOST, NET_ADAPTER
-from privacy import PUBLIC, PRIVATE
-from wview import WView
 import net
 
-class WHubAuth(object):
-    def __init__(self):
-        self._conn = WHubConnector()
-    
-    @property
-    def name(self):
-        return self.__class__.__name__
-    
-    def exist(self, guest, name, password, privacy, host=None):
-        if not host:
-            if PRIVATE == privacy:
-                host = DEFAULT_HOST
-            elif PUBLIC == privacy:
-                host = net.chkiface(NET_ADAPTER)
-        if not host:
-            return
-        return self._conn.is_active(guest, name, privacy, host)
-    
-    def confirm(self, guest, name, password, privacy):
-        if PRIVATE == privacy:
-            return WView().acceptor.accept('%s requests to join...' % name)
-        elif PUBLIC == privacy:
-            return True
+net_adaptor = 'eth0'
+ip_list = ['192.168.1.1', '192.168.1.2', '192.168.1.3', '192.168.1.4', '192.168.1.5']
+crashed = ['192.168.1.5']
+
+if __name__ == '__main__':
+    ip = net.chkiface(net_adaptor)
+    if ip not in crashed:
+        nodes = []
+        crashed_nodes = []
+        for i in ip_list:
+            if i in crashed:
+                crashed_nodes.append(net.aton(i))
+            else:
+                nodes.append(net.aton(i))
+        rep = WMDRep(ip)
+        rep.start()
+        leader = rep.get_leader(nodes)
+        if leader == net.aton(ip):
+            while True:
+                ret = rep.coordinate(crashed_nodes, len(nodes))
+                if not ret:
+                    break
+        else:
+            while True:
+                ret = rep.report(leader, crashed_nodes)
+                if not ret:
+                    break
     

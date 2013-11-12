@@ -17,25 +17,52 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
+import re
+from path import PATH_WING_CONFIG
+    
 DB_PORT = 27017
 WMON_PORT = 10001
 WHUB_PORT = 11001
 WCTRL_PORT = 12001
 WVIEW_PORT = 13001
-ROUTER_FRONTEND_PORT = 14001
-ROUTER_BACKEND_PORT = 15001
+WROUTE_PORT = 14001
+WROUTE_BACKEND_PORT = 15001
+WMD_PORT = 16001
+WMD_GEN_PORT = 17001
+WMD_SEQ_PORT = 18001
+WMD_REG_PORT = 19001
+WMD_MIX_PORT = 20001
+WMD_HEARTBEAT_PORT = 21001
+WMD_REP_PORT = 22001
 
-DB_ADDR = '192.168.154.185'
-WMON_ADDR = '10.0.0.1'
-
-ROUTER_FRONTEND_ADDR = 'tcp://192.168.154.185:%d' % (ROUTER_FRONTEND_PORT)
-ROUTER_BACKEND_ADDR = 'tcp://192.168.154.185:%d' % (ROUTER_BACKEND_PORT)
-
-WROUTE_ROLE = 0 #0: Router; 1: Worker; 2: Router and Worker
-SERVER = 0 #0: user; 1: server
-
-NET_ADAPTER = 'eth0'
-DEFAULT_ADDR = '10.0.1.1'
 DEFAULT_HOST = '*'
-LOG_ERR = 1
+LOCAL_HOST = '127.0.0.1'
+DEFAULT_ADDR = '10.0.1.1'
+DB_ADDR = '192.168.154.185'
+SRV_ADDR = '192.168.154.185'
+
+def zmqaddr(addr, port):
+    return 'tcp://%s:%d' % (addr, port)
+
+WROUTE_ADDR = zmqaddr(SRV_ADDR, WROUTE_PORT)
+WROUTE_BACKEND_ADDR = zmqaddr(SRV_ADDR, WROUTE_BACKEND_PORT)
+
+SERVER = 0 #0: client; 1: server
+WROUTE_ROLE = 0 #0: Router; 1: Worker; 2: Router and Worker
+WMD_HEARTBEAT_INTERVAL = 2 # sec
+
 DEBUG = 1
+LOG_ERR = 1
+NET_ADAPTER = 'eth0'
+        
+def getdef(attr):
+    pattern = attr + '=(\d+)'
+    f = open(PATH_WING_CONFIG)
+    lines = f.readlines()
+    f.close()
+    for l in lines:
+        res = re.match(pattern, l)
+        if res and 1 == len(res.groups()):
+            return int(res.groups()[0])
+    return None
+            

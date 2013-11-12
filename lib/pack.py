@@ -1,4 +1,4 @@
-#      wrouted.py
+#      pack.py
 #      
 #      Copyright (C) 2013 Yi-Wei Ci <ciyiwei@hotmail.com>
 #      
@@ -17,20 +17,8 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-from poller import WRoutePoller
-from worker import WRouteWorker
+def pack(s1, s2):
+    return s1 + '@' + s2
 
-import sys
-sys.path.append('../../lib')
-from default import WROUTE_ROLE
-
-if __name__ == '__main__':
-    if WROUTE_ROLE != 1:
-        poller = WRoutePoller()
-        poller.run()
-    if WROUTE_ROLE != 0:
-        worker = WRouteWorker()
-        worker.start()
-        worker.join()
-    if WROUTE_ROLE != 1:
-        poller.join()
+def unpack(s):
+    return s.split('@')

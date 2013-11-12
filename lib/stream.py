@@ -20,24 +20,19 @@
 import json
 import struct
 
-def pack(s):
-    buf = json.dumps(s)
-    size = len(buf)
-    header = struct.pack('i', size)
-    return header + buf
+def stream_input(steam, obj):
+    buf = json.dumps(obj)
+    h = struct.pack('i', len(buf))
+    return steam.send(h + buf)
 
-def unpack(s):
-    header = s.recv(len(struct.pack('i', 0)))
-    if not header:
+def stream_output(stream):
+    ret = None
+    h = stream.recv(len(struct.pack('i', 0)))
+    if not h:
         return
-    size = struct.unpack('i', header)[0]
-    buf = s.recv(size)
-    return json.loads(buf)
-
-def cat(s1, s2):
-    return s1 + '@' + s2
-
-def split(s):
-    return s.split('@')
-
-
+    size = struct.unpack('i', h)[0]
+    if size > 0:
+        buf = stream.recv(size)
+        if buf:
+            ret = json.loads(buf)
+    return ret

@@ -25,16 +25,16 @@ import uuid
 import json
 from log import log_err
 from threading import Lock
-from default import ROUTER_FRONTEND_ADDR
+from default import WROUTE_ADDR
 
-REQ_RETRIES = 3
-REQ_TIMEOUT = 30 # Seconds
+WROUTE_REQ_RETRIES = 3
+WROUTE_REQ_TIMEOUT = 30 # Seconds
 
 class WRouteReq(object):
     def _set_sock(self):
         self._sock = self._context.socket(zmq.REQ)
         self._sock.setsockopt(zmq.IDENTITY, self._id)
-        self._sock.connect(ROUTER_FRONTEND_ADDR)
+        self._sock.connect(WROUTE_ADDR)
         self._poller.register(self._sock, zmq.POLLIN)
 
     @property
@@ -76,21 +76,21 @@ class WRouteReq(object):
                 buf = json.dumps(args)
             else:
                 buf = args
-            while cnt < REQ_RETRIES:
+            while cnt < WROUTE_REQ_RETRIES:
                 cnt += 1
                 self._send(buf)
                 while True:
-                    socks = dict(self._poller.poll(REQ_TIMEOUT * 1000))
+                    socks = dict(self._poller.poll(WROUTE_REQ_TIMEOUT * 1000))
                     if socks.get(self._sock):
                         reply = self._sock.recv_multipart()
                         if len(reply) != 2:
                             break
                         if int(reply[0]) == self._seq:
-                            cnt = REQ_RETRIES
+                            cnt = WROUTE_REQ_RETRIES
                             res = json.loads(reply[1])
                             break
                     else:
-                        if cnt < REQ_RETRIES:
+                        if cnt < WROUTE_REQ_RETRIES:
                             self._reset_sock()
                         break
         finally:

@@ -19,8 +19,8 @@
 
 import socket
 from log import log_err
-from stream import pack, unpack
-from default import WVIEW_PORT
+from default import WVIEW_PORT, LOCAL_HOST
+from stream import stream_input, stream_output
 
 class WViewProc(object):
     def __init__(self, viewer):
@@ -33,7 +33,7 @@ class WViewProc(object):
     
     def _open(self):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.connect(('127.0.0.1', WVIEW_PORT))
+        self._sock.connect((LOCAL_HOST, WVIEW_PORT))
     
     def _close(self):
         if self._sock:
@@ -42,11 +42,11 @@ class WViewProc(object):
     
     def _send(self, cmd):
         if self._sock:
-            self._sock.send(pack(cmd))
+            stream_input(self._sock, cmd)
     
     def _recv(self):
         if self._sock:
-            return unpack(self._sock)
+            return stream_output(self._sock)
     
     def _proc(self, *args):
         try:

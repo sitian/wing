@@ -25,7 +25,7 @@ import sys
 sys.path.append('../../lib')
 from path import *
 import stream
-import iface
+import net
 
 VPN_RETRY_MAX = 5
 VPN_RETRY_INTERVAL = 3 # Seconds
@@ -66,12 +66,12 @@ def chkadapter(name):
                 time.sleep(VPN_RETRY_INTERVAL)
     return adapter
 
-def chkaddr(adapter):
+def chkaddr(iface):
     cnt = 0
     vaddr = ''
     while cnt < VPN_RETRY_MAX:
         cnt += 1
-        vaddr = iface.chkaddr(adapter)
+        vaddr = net.chkiface(iface)
         if vaddr:
             break
         elif cnt < VPN_RETRY_MAX:
