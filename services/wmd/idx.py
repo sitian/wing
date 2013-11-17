@@ -23,8 +23,7 @@ from threading import Lock
 from json import dumps, loads
 
 sys.path.append('../../lib')
-from default import DEBUG
-from log import log_err
+from log import log, log_err
 import net
 
 WMD_IDX_SEPERATOR = '.'
@@ -58,12 +57,11 @@ def compare(index1, index2):
         else:
             return 0
 
-def show(string, index, addr=None):
-    if DEBUG:
-        if not addr:
-            print '%s id=%d, sn=%d' % (string, getid(index), getsn(index))
-        else:
-            print '%s %s, sn=%d' % (string, net.ntoa(addr), getsn(index))
+def show(cls, string, index, addr=None):
+    if not addr:
+        log(cls, '%s id=%d, sn=%d' % (string, getid(index), getsn(index)))
+    else:
+        log(cls, '%s %s, sn=%d' % (string, net.ntoa(addr), getsn(index)))
 
 class WMDIndex(object):
     def __init__(self, index=None):
@@ -91,7 +89,7 @@ class WMDIndex(object):
                     return True
             return False
         except:
-            log_err('WMDIdx: failed to update')
+            log_err(self, 'failed to update')
         finally:
             self.__lock.release()
             
@@ -124,13 +122,12 @@ class WMDIndex(object):
     def idxrcv(self, sock):
         cmd = None
         index = None
-        
         while True:
             self.__lock.acquire()
             try:
                 if self.__que.has_key(self.__sn):
-                    index, cmd = self._cmd_que[self.__sn]
-                    del self._cmd_que[self.__sn]
+                    index, cmd = self.__que[self.__sn]
+                    del self.__que[self.__sn]
                     self._idxchg()
                     return (index, cmd)
                 else:
@@ -138,15 +135,15 @@ class WMDIndex(object):
                     try:
                         index, cmd = self._idxrcv(sock)
                     except:
-                        log_err('WMDIndex: failed to receive')
+                        log_err(self, 'failed to receive')
                         raise Exception('WMDIndex: failed to receive')
                     finally:
                         self.__lock.acquire()
                     if not index:
-                        log_err('WMDIndex: invalid index')
+                        log_err(self, 'invalid index')
                         raise Exception('WMDIndex: invalid index')
                     if getid(index) != self.__id:
-                        log_err('WMDIndex: invalid id')
+                        log_err(self, 'invalid id')
                         raise Exception('WMDIndex: invalid id')
                     sn = getsn(index)
                     if sn == self.__sn:

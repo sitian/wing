@@ -61,12 +61,12 @@ class WMDPub(WMDIndex, Thread):
             buf = sock.recv()
             sock.close()
             if not buf or not loads(buf):
-                log_err('WMDPub: failed to connect')
-                raise Exception('WMDPub: failed to connect')
+                log_err(self, 'failed to connect')
+                raise Exception(self, 'failed to connect')
             if WMD_PUB_SHOW_ADDR:
-                log('WMDPub: >> %s' % addr[0])
+                log(self, '>> %s' % addr[0])
         if WMD_PUB_SHOW_ADDR:
-            log('WMDPub: [run] %s' % self._ip)
+            log(self, '[run] %s' % self._ip)
     
     def close(self):
         if self._sock:
@@ -87,6 +87,6 @@ class WMDPub(WMDIndex, Thread):
                 else:
                     sock.send('l')
             except:
-                log_err('WMDPub: cannot communicate with subscribers')
+                log_err(self, 'cannot communicate with subscribers')
                 break
         sock.close()

@@ -21,6 +21,7 @@ PATH_NFS_ROOT = '/nfs'
 PATH_NFS = '10.0.0.2:%s' % PATH_NFS_ROOT
 PATH_PPP_PEERS = '/etc/ppp/peers'
 PATH_LXC = '/var/lib/lxc'
+PATH_LOG = '/var/log'
 
 PATH_WING_VAR_LIB = '/var/lib/wing'
 PATH_WING_VAR_RUN = '/var/run/wing'

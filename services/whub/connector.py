@@ -91,13 +91,13 @@ class WHubConnector(object):
         try:
             return WHub(addr).enter(guest, name, secret, password, privacy)
         except:
-            log_err('%s: failed to enter' % self.name)
+            log_err(self, 'failed to enter')
     
     def exit(self, addr, guest, name, secret, password='', privacy=PRIVATE, host=DEFAULT_HOST):
         try:
             return WHub(addr).exit(guest, name, secret, password, privacy, host)
         except:
-            log_err('%s: failed to exit' % self.name)
+            log_err(self, 'failed to exit')
           
     def _connect(self, guest, name, secret, privacy, host):
         try:
@@ -114,12 +114,12 @@ class WHubConnector(object):
                     return
             return True
         except:
-            log_err('%s: failed to connect' % self.name)
+            log_err(self, 'failed to connect')
     
     def connect(self, guest, name, secret, privacy):
         host = WHubHost().acquire(guest, privacy)
         if not host:
-            log_err('%s: failed to acquire host, user=%s' % (self.name, name))
+            log_err(self, 'failed to acquire host, user=%s' % name)
             return
         real = self._get_real_name(guest)
         if not self._connect(guest, real, secret, privacy, host):
@@ -156,7 +156,7 @@ class WHubConnector(object):
                 WHub(host, dev).unmount(name)
             return True
         except:
-            log_err('%s: failed to disconnect', self.name)
+            log_err(self, 'failed to disconnect')
     
     def disconnect(self, guest, name, secret, privacy, host):
         real = self._get_real_name(guest)

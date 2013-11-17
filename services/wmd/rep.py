@@ -95,7 +95,7 @@ class WMDRep(Thread):
         context = zmq.Context()
         
         if WMD_REP_SHOW_REPORT:
-            log('WMDRep: report=>start, @%s, leader=%s' % (net.ntoa(self._addr), net.ntoa(leader)))
+            log(self, 'report=>start, @%s, leader=%s' % (net.ntoa(self._addr), net.ntoa(leader)))
                 
         try:
             sock = context.socket(zmq.REQ)
@@ -104,20 +104,20 @@ class WMDRep(Thread):
             while True:
                 args = self._recv(sock)
                 if not args or not args.has_key('cmd'):
-                    log_err('WMDRep: failed to report, invalid command')
+                    log_err(self, 'failed to report, invalid command')
                     break
                 
                 cmd = args['cmd']
                 if cmd != stat and cmd != WMD_REP_WAIT:
-                    log_err('WMDRep: invalid command, cmd=%d' % cmd)
+                    log_err(self, 'invalid command, cmd=%d' % cmd)
                     break
                 
                 if not args.has_key('id'):
-                    log_err('WMDRep: no report id, cmd=%d' % cmd)
+                    log_err(self, 'no report id, cmd=%d' % cmd)
                     break
                 
                 if cmd != WMD_REP_START and args['id'] != rep_id:
-                    log_err('WMDRep: invalid report id, cmd=%d' % cmd)
+                    log_err(self, 'invalid report id, cmd=%d' % cmd)
                     break
                 
                 if cmd == WMD_REP_START:
@@ -125,20 +125,20 @@ class WMDRep(Thread):
                     self._send(sock, {'cmd':WMD_REP_ACCEPT, 'id':rep_id, 'addr':self._addr, 'nodes':nodes})
                     stat = WMD_REP_ACCEPT
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: report=>accept (rep_id=%d)' % rep_id)
+                        log(self, 'report=>accept (rep_id=%d)' % rep_id)
                 elif cmd == WMD_REP_ACCEPT:
                     self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
                     stat = WMD_REP_STOP
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: report=>stop (rep_id=%d)' % rep_id)
+                        log(self, 'report=>stop (rep_id=%d)' % rep_id)
                 elif cmd == WMD_REP_WAIT:
                     time.sleep(WMD_REP_SLEEP_TIME)
                     self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: report=>wait (rep_id=%d)' % rep_id)
+                        log(self, 'report=>wait (rep_id=%d)' % rep_id)
                 elif cmd == WMD_REP_STOP:
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: report=>finish (rep_id=%d)' % rep_id)
+                        log(self, 'report=>finish (rep_id=%d)' % rep_id)
                     ret = 0
                     break 
         finally:
@@ -147,12 +147,12 @@ class WMDRep(Thread):
             
     def report(self, leader, nodes):
         if not nodes or self._addr in nodes:
-            log_err('WMDRep: failed to report, invalid parameters')
+            log_err(self, 'failed to report, invalid parameters')
             return -1
         try:
             return self._report(leader, nodes)
         except:
-            log_err('WMDRep: failed to report')
+            log_err(self, 'failed to report')
             return -1
         
     def _coordinate(self):
@@ -164,14 +164,14 @@ class WMDRep(Thread):
         rep_id = uuid.uuid4().int
         
         if WMD_REP_SHOW_REPORT:
-            log('WMDRep: coordinate=>start, @%s (rep_id=%d)' % (net.ntoa(self._addr), rep_id))
+            log(self, 'coordinate=>start, @%s (rep_id=%d)' % (net.ntoa(self._addr), rep_id))
             
         try:
             while True:
                 addr = None
                 args = self._recv(self._sock, timeout=WMD_REP_LONG_TIMEOUT)
                 if not args or not args.has_key('cmd'):
-                    log_err('WMDRep: failed to coordinate, invalid command')
+                    log_err(self, 'failed to coordinate, invalid command')
                     break
                 
                 cmd = args['cmd']
@@ -187,7 +187,7 @@ class WMDRep(Thread):
                 
                 if cmd == WMD_REP_ACCEPT:
                     if not args.has_key('nodes'):
-                        log_err('WMDRep: failed to get nodes')
+                        log_err(self, 'failed to get nodes')
                         self._send(self._sock, {'cmd':WMD_REP_ABORT})
                         break
                     
@@ -209,24 +209,24 @@ class WMDRep(Thread):
                         stop = True
                     
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: coordinate=>accept, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
+                        log(self, 'coordinate=>accept, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
                 elif cmd == WMD_REP_STOP:
                     if not stop:
                         cmd = WMD_REP_WAIT
                         if WMD_REP_SHOW_REPORT:
-                            log('WMDRep: coordinate=>wait, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
+                            log(self, 'coordinate=>wait, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
                     else:
                         if addr in self._nodes:
-                            log('WMDRep: found an available node')
+                            log(self, 'found an available node')
                             break
                         stopped.update({addr:None})
                         if WMD_REP_SHOW_REPORT:
-                            log('WMDRep: coordinate=>stop, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
+                            log(self, 'coordinate=>stop, %s (rep_id=%d)' % (net.ntoa(addr), rep_id))
                 self._send(self._sock, {'cmd':cmd, 'id':rep_id})
                 if len(stopped) == total:
                     ret = 0
                     if WMD_REP_SHOW_REPORT:
-                        log('WMDRep: coordinate=>finish (rep_id=%d)' % rep_id)
+                        log(self, 'coordinate=>finish (rep_id=%d)' % rep_id)
                     break
         except:
             self._free_sock()
@@ -235,7 +235,7 @@ class WMDRep(Thread):
     
     def coordinate(self, nodes, total):
         if not nodes or self._addr in nodes or total <= 0:
-            log_err('WMDRep: failed to coordinate, invalid parameters')
+            log_err(self, 'failed to coordinate, invalid parameters')
             return -1
         self._nodes = nodes
         self._total = total

@@ -23,12 +23,12 @@ import sys
 sys.path.append('../../lib')
 import net
 
-net_adaptor = 'eth0'
+NET_ADAPTER = 'eth0'
 ip_list = ['192.168.1.1', '192.168.1.2', '192.168.1.3', '192.168.1.4', '192.168.1.5']
 crashed = ['192.168.1.5']
 
 if __name__ == '__main__':
-    ip = net.chkiface(net_adaptor)
+    ip = net.chkiface(NET_ADAPTER)
     if ip not in crashed:
         nodes = []
         crashed_nodes = []

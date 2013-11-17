@@ -19,10 +19,9 @@
 
 import sys
 import idx
-import mds
 import time
+from sub import getsub
 from json import dumps, loads
-from threading import Lock
 from reg import WMDReg
 from pub import WMDPub
 
@@ -33,34 +32,35 @@ from log import log, log_err
 import net
 
 WMD_SEQ_SHOW_RECV = True
-WMD_SEQ_SHOW_UPDATE = True
 WMD_SEQ_SHOW_FORWARD = True
 
 class WMDSeq(WMDReg):
     def __init__(self, ip, cmd):
         WMDReg.__init__(self, ip, WMD_REG_PORT)
         self._addr = net.aton(ip)
-        self._lock = Lock()
         self._pub = None
         self._cmd = cmd
-        
+    
+    def _show_recv(self, index):
+        if WMD_SEQ_SHOW_RECV:
+            idx.show(self, '[rcv]', index, self.get_addr(idx.getid(index)))
+    
+    def _show_forward(self, index):
+        if WMD_SEQ_SHOW_FORWARD:
+            idx.show(self, '[snd]', index, self._addr)
+            
     def _register(self):
         ip = net.ntoa(self._addr)
-        sub = mds.get(ip, WMD_MIX_PORT)
+        sub = getsub(ip, WMD_MIX_PORT)
         if not sub:
             sys.exit(0)
         self._pub = WMDPub(ip, WMD_SEQ_PORT)
         self._pub.register(sub, heartbeat=True)
     
     def _recv(self, addr):
-        try:
-            index, cmd = self._sub[addr].recv()
-            if WMD_SEQ_SHOW_RECV:
-                idx.show('WMDSeq: [rcv]', index, addr)
-            return (index, cmd)
-        except:
-            log_err('WMDSeq: failed to receive')
-            return (None, None)
+        index, cmd = self._sub[addr].recv()
+        self._show_recv(index)
+        return (index, cmd)
     
     def _pack(self, index, cmd):
         return dumps((index, cmd, self._cmd.track()))
@@ -69,43 +69,38 @@ class WMDSeq(WMDReg):
         return loads(cmd)
     
     def _forward(self, index, cmd):
-        self._lock.acquire()
-        try:
-            new_idx = self._pub.idxget()
-            new_cmd = self._pack(index, cmd)
-            self._pub.send(new_cmd, new_idx)
-            self._cmd.add(self._addr, new_idx, new_cmd)
-            if WMD_SEQ_SHOW_FORWARD:
-                idx.show('WMDSeq: [snd]', new_idx, self._addr)
-        except:
-            log_err('WMDSeq: failed to forward')
-        finally:
-            self._lock.release()
-    
+        new_idx = self._pub.idxget()
+        new_cmd = self._pack(index, cmd)
+        self._pub.send(new_cmd, new_idx)
+        self._cmd.add(self._addr, new_idx, new_cmd)
+        self._show_forward(new_idx)
+            
     def _proc(self, addr):
-        while True:
+        wait = False
+        while not self._pub:
+            if not wait:
+                log(self, 'wait')
+                wait = True
             time.sleep(1)
-            if self._pub:
-                break
-            log('WMDSeq: waiting ...')
-        
-        while True:
-            index, cmd = self._recv(addr)
-            if not index:
-                log_err('WMDSeq: failed to process')
-                self._stop_sub(addr)
-                break
-            self._forward(index, cmd)
+        try:
+            while True:
+                try:
+                    index, cmd = self._recv(addr)
+                except:
+                    log_err(self, 'failed to receive')
+                    self._stop_sub(addr)
+                    break
+                self._forward(index, cmd)
+        except:
+            log_err(self, 'failed to process')
     
     def update(self, cmd):
         index, orig, track = self._unpack(cmd)
         identity = idx.getid(index)
         addr = self._sub_addr.get(identity)
         if not addr or not self._sub.has_key(addr):
-            log_err('WMDSeq: no subscriber')
+            log_err(self, 'no subscriber')
             return
         if self._sub[addr].idxnxt(index, orig):
-            if WMD_SEQ_SHOW_UPDATE:
-                idx.show('WMDSeq: [new]', index, addr)
             self._forward(index, orig)
-    
+        

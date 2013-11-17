@@ -36,14 +36,15 @@ class WMDCmd(WMDRep):
         self._quorum = int(self._mds_max / 2) + 1
         self._que = WMDQue(ip, self._mds_max, self._quorum)
         self._lock = Lock()
+        self._index = {}
         self._head = []
-        self._idx = {}
     
     def _check(self, index):
-        i, s = idx.extract(index)
-        if self._idx.has_key(i) and s < self._idx[i]:
+        identity, sn = idx.extract(index)
+        if self._index.has_key(identity) and sn < self._index[identity]:
             return -1
         else:
+            self._index.update({identity:sn})
             return 0
     
     def mkactive(self, addr):
@@ -51,7 +52,7 @@ class WMDCmd(WMDRep):
         try:
             return self._que.mkactive(addr)
         except:
-            log_err('WMDCmd: failed to make active, addr=%s' % net.ntoa(addr))
+            log_err(self, 'failed to make active, addr=%s' % net.ntoa(addr))
             return False
         finally:
             self._lock.release()
@@ -61,7 +62,7 @@ class WMDCmd(WMDRep):
         try:
             return self._que.mkinactive(self, suspect)
         except:
-            log_err('WMDCmd: failed to make inactive, suspect=%s' % str(suspect))
+            log_err(self, 'failed to make inactive, suspect=%s' % str(suspect))
             return False
         finally:
             self._lock.release()
@@ -70,11 +71,10 @@ class WMDCmd(WMDRep):
         self._lock.acquire()
         try:
             if self._check(index) < 0:
-                log('WMDCmd: failed to add, %s' % net.ntoa(addr))
                 return
             self._que.add(addr, index, cmd, update)
         except:
-            log_err('WMDCmd: failed to add, %s' % net.ntoa(addr))
+            log_err(self, 'failed to add, %s' % net.ntoa(addr))
         finally:
             self._lock.release()
     
@@ -83,7 +83,7 @@ class WMDCmd(WMDRep):
         try:
             return self._que.track()
         except:
-            log_err('WMDCmd: failed to track')
+            log_err(self, 'failed to track')
         finally:
             self._lock.release()
     
@@ -94,7 +94,7 @@ class WMDCmd(WMDRep):
         try:
             index, cmd = self._que.choose()
         except:
-            log_err('WMDCmd: failed to pop')
+            log_err(self, 'failed to pop')
         finally:
             self._lock.release()
             return (index, cmd)

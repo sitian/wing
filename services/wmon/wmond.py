@@ -59,7 +59,7 @@ class WMond(Thread):
             res = async.get(timeout)
             stream_input(sock, res)
         except TimeoutError:
-            log_err('%s: failed to process (timeout)' % self.name)
+            log_err(self, 'failed to process (timeout)')
             pool.terminate()
         finally:
             sock.close()
@@ -76,7 +76,7 @@ class WMond(Thread):
                     timeout = req['timeout']
                     trig = self._triggers[req['trigger']]
                 except:
-                    log_err('%s: invalid parameters' % self.name)
+                    log_err(self, 'invalid parameters')
                     sock.close()
                     continue
                 thread = Thread(target=self.proc, args=(sock, trig, op, args, timeout))

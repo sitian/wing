@@ -1,4 +1,4 @@
-#      net.py
+#      network.py
 #      
 #      Copyright (C) 2013 Yi-Wei Ci <ciyiwei@hotmail.com>
 #      
@@ -45,7 +45,7 @@ class Network(WHubDev):
         elif PRIVATE == privacy:
             res = WCtrl().auth.login(name, secret, privacy, host)
         if not res:
-            log_err('%s: failed to register net' % self.name)
+            log_err(self, 'failed to register net')
             return
         return True
 
@@ -56,7 +56,7 @@ class Network(WHubDev):
         elif PRIVATE == privacy:
             res = WCtrl().auth.logout(name, secret, privacy, host)
         if not res:
-            log_err('%s: failed to unregister net' % self.name)
+            log_err(self, 'failed to unregister net')
             return
         return True
     
@@ -68,7 +68,7 @@ class Network(WHubDev):
             bridge.create(name, addr)
             return True
         except:
-            log_err('%s: failed to mount' % self.name)
+            log_err(self, 'failed to mount')
             if addr:
                 vpn.stop(name)
             vpn.destroy(name)
@@ -80,5 +80,5 @@ class Network(WHubDev):
             bridge.destroy(name)
             return True
         except:
-            log_err('%s: failed to unmount' % self.name)
+            log_err(self, 'failed to unmount')
     

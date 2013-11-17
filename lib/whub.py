@@ -65,7 +65,7 @@ class WHub(object):
             self._send(cmd)
             return self._recv()
         except:
-            log_err('WHubProc: failed')
+            log_err(self, 'failed')
         finally:
             self._close()
         

@@ -58,7 +58,7 @@ class WCtrld(Thread):
 			res = async.get(timeout)
 			stream_input(sock, res)
 		except TimeoutError:
-			log_err('%s: failed to process (timeout)' % self.name)
+			log_err(self, 'failed to process (timeout)')
 			pool.terminate()
 		finally:
 			sock.close()
@@ -75,7 +75,7 @@ class WCtrld(Thread):
 					timeout = req['timeout']
 					ctrl = self._ctrls[req['ctrl']]
 				except:
-					log_err('%s: invalid parameters' % self.name)
+					log_err(self, 'invalid parameters')
 					sock.close()
 					continue
 				thread = Thread(target=self.proc, args=(sock, ctrl, op, args, timeout))

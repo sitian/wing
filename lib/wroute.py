@@ -126,7 +126,7 @@ class WRouteProc(object):
             req.release()
             return res
         except:
-            log_err("WRouteProc: failed")
+            log_err(self, "failed")
         
 class WRoute(object):
     def __init__(self, timeout=None):

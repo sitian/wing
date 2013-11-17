@@ -56,5 +56,5 @@ class WMonHandler(Thread):
         try:
             self.proc()
         except:
-            log_err('%s: failed to process' % self.name)
+            log_err(self, 'failed to process')
     

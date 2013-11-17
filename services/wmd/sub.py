@@ -17,6 +17,7 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
+import re
 import sys
 import zmq
 import idx
@@ -28,13 +29,33 @@ from threading import Thread
 
 sys.path.append('../../lib')
 from default import WMD_HEARTBEAT_INTERVAL, WMD_HEARTBEAT_PORT
-from default import zmqaddr
-from log import log
+from default import zmqaddr, getdef
+from log import log, log_err
 import net
 
 WMD_SUB_SHOW_ADDR = True
 WMD_SUB_SHOW_DISCONNECT = True
-        
+
+def getsub(ip, port=None):
+    try:
+        res = re.match('(\d{1,3}\.\d{1,3}\.\d{1,3}\.)\d{1,3}', ip).groups()
+        if len(res) != 1:
+            log_err(None, 'Failed to get subscribers, invalid address')
+            return None
+        net = res[0]
+        mds_max = getdef('MDS_MAX')
+        if not mds_max:
+            log_err(None, 'Failed to get subscribers, mds_max=0')
+            return None
+        sub = []
+        for i in range(mds_max):
+            addr = '%s%d' % (net, i + 1) 
+            sub.append((addr, port))
+        return sub
+    except:
+        log_err(None, 'Failed to get subscribers')
+        return None
+    
 class WMDSub(WMDIndex, Thread):
     def _init_sock(self, ip, port):
         self._context = zmq.Context()
@@ -47,16 +68,23 @@ class WMDSub(WMDIndex, Thread):
         self._port = port
         self._ip = ip
     
+    def _show_addr(self, ip, identity):
+        if WMD_SUB_SHOW_ADDR:
+            log(self, '<< %s (id=%s)' % (ip, str(identity)))
+            
+    def _show_disconnect(self):
+        if WMD_SUB_SHOW_DISCONNECT:
+            log(self, 'cannot connect to %s' % self._ip)
+            
     def __init__(self, ip, port, index, heartbeat=False, fault=None, live=None):
-        Thread.__init__(self)
+        self._show_addr(ip, idx.getid(index))
         WMDIndex.__init__(self, index)
+        Thread.__init__(self)
         self._heartbeat = heartbeat
         self._init_sock(ip, port)
         self._addr = net.aton(ip)
         self._fault = fault
         self._live = live
-        if WMD_SUB_SHOW_ADDR:
-            log('WMDSub: << %s (id=%s)' % (ip, str(idx.getid(index))))
     
     def _remove(self):
         if self._fault:
@@ -94,8 +122,7 @@ class WMDSub(WMDIndex, Thread):
                     err = 0
             finally:
                 if err:
-                    if WMD_SUB_SHOW_DISCONNECT:
-                        log('WMDSub: cannot connect to %s' % self._ip)
+                    self._show_disconnect()
                     if self._remove():
                         context.destroy()
                         self._destroy()

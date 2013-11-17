@@ -80,18 +80,18 @@ class WRouteWorker(Thread):
             tsk_args = args['args']
             tsk_timeout = args['timeout']
             if not self._tasks.has_key(tsk_name):
-                log_err('%s: no such task %s', self.name, tsk_name)
+                log_err(self, 'no such task %s', tsk_name)
                 return
             pool = ThreadPool(processes=1)
             async = pool.apply_async(self._tasks[tsk_name].proc, (), tsk_args)
             try:
                 return async.get(tsk_timeout)
             except TimeoutError:
-                log_err('%s: failed to process (timeout)' % self.name)
+                log_err(self, 'failed to process (timeout)')
                 pool.terminate()
                 return
         except:
-            log_err('%s: failed to process' % self.name)
+            log_err(self, 'failed to process')
         
     def run(self):
         liveness = PPP_HEARTBEAT_LIVENESS
@@ -101,17 +101,16 @@ class WRouteWorker(Thread):
             if socks.get(self._sock) == zmq.POLLIN:
                 frames = self._sock.recv_multipart()
                 if not frames:
-                    log_err('%s: found an empty request' % self.name)
+                    log_err(self, 'found an empty request')
                     break
                 if len(frames) == PPP_NR_FRAMES:
-                    #log("Request: id=%s, seq=%s" % (frames[PPP_FRAME_ID], frames[PPP_FRAME_SEQ]))
                     res = self.proc(frames[PPP_FRAME_BUF])
                     msg = [frames[PPP_FRAME_ID], '', frames[PPP_FRAME_SEQ], json.dumps(res)]
                     self._sock.send_multipart(msg)
                 elif len(frames) == 1 and frames[0] == PPP_HEARTBEAT:
                     liveness = PPP_HEARTBEAT_LIVENESS
                 else:
-                    log_err("%s: invalid request, %s" % (self.name, frames))
+                    log_err(self, "invalid request, %s" % frames)
             else:
                 liveness -= 1
                 if liveness == 0:

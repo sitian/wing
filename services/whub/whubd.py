@@ -80,25 +80,25 @@ class WHubd(object):
     
     def enter(self, guest, name, secret, password, privacy):
         if not net.validate(guest):
-            log_err('%s: failed, invalid addr' % self.name)
+            log_err(self, 'failed, invalid addr')
             return
         res = None
         self._lock_acquire(guest)
         if not self._auth.exist(guest, name, password, privacy):
             if self._auth.confirm(guest, name, password, privacy):
-                log('%s: enter (%s)' % (self.name, name))
+                log(self, 'enter (%s)' % name)
                 res = self._conn.connect(guest, name, secret, privacy)
         self._lock_release(guest)
         return res
     
     def exit(self, guest, name, secret, password, privacy, host):
         if not net.validate(guest):
-            log_err('%s: failed, invalid addr' % self.name)
+            log_err(self, 'failed, invalid addr')
             return
         res = None
         self._lock_acquire(guest)
         if self._auth.exist(guest, name, password, privacy, host):
-            log('%s: exit (%s)' % (self.name, name))
+            log(self, 'exit (%s)' % name)
             res = self._conn.disconnect(guest, name, secret, privacy, host)
         self._lock_release(guest)
         return res
@@ -108,14 +108,14 @@ class WHubd(object):
             res = None
             if dev:
                 if not self._dev.has_key(dev):
-                    log_err('%s: no such device %s' % (self.name, dev))
+                    log_err(self, 'no such device %s' % dev)
                     return
                 pool = ThreadPool(processes=1)
                 async = pool.apply_async(self._dev[dev].proc, (op, args))
                 try:
                     res = async.get(timeout)
                 except TimeoutError:
-                    log_err('%s: failed to process (timeout)' % self.name)
+                    log_err(self, 'failed to process (timeout)')
                     pool.terminate()
                     return
             else:
@@ -143,7 +143,7 @@ class WHubd(object):
                     else:
                         dev = None
                 except:
-                    log_err('%s: invalid parameters' % self.name)
+                    log_err(self, 'invalid parameters')
                     sock.close()
                     continue
                 thread = Thread(target=self.proc, args=(sock, dev, op, args, timeout))

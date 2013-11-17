@@ -29,14 +29,14 @@ class WRouteTask(object):
     def proc(self, op, args):
         try:
             if op[0] == '_':
-                log_err('%s: invalid operation' % self.name)
+                log_err(self, 'invalid operation')
                 return
             func = getattr(self, op)
             if not func:
-                log_err('%s: invalid operation' % self.name)
+                log_err(self, 'invalid operation')
                 return
             return func(*args)
         except:
-            log_err('%s: failed to process' % self.name)
+            log_err(self, 'failed to process')
     
     

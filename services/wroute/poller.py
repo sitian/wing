@@ -72,9 +72,8 @@ class WRoutePoller(Thread):
                 msg = frames[1:]
                 if len(msg) == 1:
                     if msg[0] not in (PPP_READY, PPP_HEARTBEAT):
-                        log_err("%s: invalid message, %s" % (self.name, msg))
+                        log_err(self, "invalid message, %s" % msg)
                 else:
-                    #log("Reply: id=%s, seq=%s" % (msg[PPP_FRAME_ID], msg[PPP_FRAME_SEQ]))
                     self._frontend.send_multipart(msg)
                 
                 if time.time() >= timeout:

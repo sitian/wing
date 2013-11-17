@@ -51,8 +51,9 @@ SERVER = 0 #0: client; 1: server
 WROUTE_ROLE = 0 #0: Router; 1: Worker; 2: Router and Worker
 WMD_HEARTBEAT_INTERVAL = 2 # sec
 
-DEBUG = 1
-LOG_ERR = 1
+DEBUG = True
+LOG_ERR = True
+LOG_FILE = True
 NET_ADAPTER = 'eth0'
         
 def getdef(attr):

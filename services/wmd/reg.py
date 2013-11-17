@@ -94,7 +94,7 @@ class WMDReg(Thread):
                 sub = None
                 buf = self._sock.recv()
                 if not buf:
-                    log_err('WMDReg: failed to receive')
+                    log_err(self, 'failed to receive')
                     continue
                 args = loads(buf)
                 ip = args['ip']
@@ -110,14 +110,16 @@ class WMDReg(Thread):
                         self._stop_sub(addr)
                     else:
                         exist = True
+                    
                 if not exist:
                     self._sub_id.update({addr:identity})
                     self._sub_addr.update({identity:addr})
                     sub = WMDSub(ip, port, index, heartbeat, self._fault, self._live)
                     self._sub.update({addr:sub})
                     Thread(target=self._start_sub, args=(addr,)).start()
+                    
                 self._sock.send(dumps(True))
             except:
-                log_err('WMDReg: failed to register')
+                log_err(self, 'failed to register')
                 continue
     

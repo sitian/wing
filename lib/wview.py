@@ -55,7 +55,7 @@ class WViewProc(object):
             self._send(cmd)
             return self._recv()
         except:
-            log_err('WViewProc: failed')
+            log_err(self, 'failed')
         finally:
             self._close()
     

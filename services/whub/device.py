@@ -50,11 +50,11 @@ class WHubDev(object):
     
     def proc(self, op, args):
         if op not in self._op:
-            log_err('%s: invalid op %s' % (self.name, op))
+            log_err(self, 'invalid op %s' % op)
             return
         try:
             func = getattr(self, op)
             return func(*args)
         except:
-            log_err('%s: failed to process (op=%s)' % (self.name, op))
+            log_err(self, 'failed to process (op=%s)' % op)
     

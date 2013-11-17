@@ -40,7 +40,7 @@ class WMDReq(object):
     def send(self, buf):
         ret = False
         if not self._connected:
-            log_err('WMDReq: No connection')
+            log_err(self, 'no connection')
             return ret
         try:
             self._sock.send(buf)
@@ -48,7 +48,7 @@ class WMDReq(object):
             if res and loads(res):
                 ret = True
         except:
-            log_err('WMDReq: failed to send')
+            log_err(self, 'failed to send')
         finally:
             return ret
     

@@ -39,6 +39,14 @@ class WMDMix(WMDReg):
         self._cmd = cmd
         self._seq = seq
     
+    def _show_recv(self, index):
+        if WMD_MIX_SHOW_RECV:
+            idx.show(self, '[rcv]', index, self.get_addr(idx.getid(index)))
+    
+    def _show_deliver(self, index):
+        if WMD_MIX_SHOW_DELIVER:
+            idx.show(self, '[ + ]', index, self._seq.get_addr(idx.getid(index)))
+            
     def _fault(self, addr):
         self._suspect.update({addr:None})
         return self._cmd.mkinactive(self._suspect)
@@ -53,18 +61,16 @@ class WMDMix(WMDReg):
             n, c = self._cmd.pop() #n:index, c:command
             if not n:
                 break
-            if WMD_MIX_SHOW_DELIVER:
-                idx.show('WMDMix: [ + ]', n, self._seq.get_addr(idx.getid(n)))
+            self._show_deliver(n)
             self._hdl.proc(c)
     
     def _recv(self, addr):
         try:
             index, cmd = self._sub[addr].recv()
-            if WMD_MIX_SHOW_RECV:
-                idx.show('WMDMix: [rcv]', index, addr)
+            self._show_recv(index)
             return (index, cmd)
         except:
-            log_err('WMDMix: failed to receive, addr=%s' % net.ntoa(addr))
+            log_err(self, 'failed to receive, addr=%s' % net.ntoa(addr))
             return (None, None)
     
     def _proc(self, addr):

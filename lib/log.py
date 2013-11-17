@@ -17,16 +17,40 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-import default
+import os
+from default import DEBUG, LOG_ERR, LOG_FILE
+from path import PATH_LOG
 
-def log(s):
-    if default.DEBUG:
-        print str(s)
+def _cls_name(cls):
+    if cls:
+        return cls.__class__.__name__
     else:
-        return
+        return 'Debug'
 
-def log_err(s):
-    if default.DEBUG and default.LOG_ERR:
-        print str(s)
-    else:
-        return
+def log(cls, s):
+    if DEBUG:
+        print _cls_name(cls) + ': ' + str(s)
+
+def log_err(cls, s):
+    if DEBUG and LOG_ERR:
+        print _cls_name(cls) + ': ' + str(s)
+
+def log_file(cls, name, s):
+    if DEBUG and LOG_FILE:
+        name = _cls_name(cls).lower() + '.' + str(name)    
+        path = os.path.join(PATH_LOG, name)
+        f = open(path, 'a')
+        if f:
+            f.write(str(s) + '\n')
+            f.close()
+
+def log_clean(cls):
+    if DEBUG:
+        prefix = _cls_name(cls).lower()
+        for name in os.listdir(PATH_LOG):
+            path = os.path.join(PATH_LOG, name)
+            if not os.path.isdir(path):
+                if len(prefix) <= len(name):
+                    if cmp(prefix, name[:len(prefix)]) == 0:
+                        os.remove(path)
+        

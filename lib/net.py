@@ -33,7 +33,7 @@ def aton(addr):
     return struct.unpack('I', socket.inet_aton(addr))[0]
 
 def ntoa(addr):
-    return socket.inet_ntoa(struct.pack('I', addr)) 
+    return socket.inet_ntoa(struct.pack('I', int(addr))) 
 
 def validate(addr):
     ret = False

@@ -17,9 +17,9 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-import mds
 import sys
 import zmq
+from sub import getsub
 from json import dumps
 
 sys.path.append('../../lib')
@@ -43,7 +43,7 @@ class WMDGen(object):
         self._pub = None
     
     def _register(self):
-        sub = mds.get(self._ip, WMD_REG_PORT)
+        sub = getsub(self._ip, WMD_REG_PORT)
         if not sub:
             sys.exit(0)
         self._pub = WMDPub(self._ip, WMD_GEN_PORT)
@@ -55,13 +55,13 @@ class WMDGen(object):
             try:
                 buf = self._sock.recv()
             except:
-                log_err('WMDGen: failed to receive')
+                log_err(self, 'failed to receive')
                 continue
             try:
                 self._pub.send(buf)
                 ret = True
             except:
-                log_err('WMDGen: failed to send')
+                log_err(self, 'failed to send')
                 ret = False
             self._sock.send(dumps(ret))
     

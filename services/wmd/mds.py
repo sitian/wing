@@ -17,35 +17,10 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-import re
 import sys
 from cmd import WMDCmd
 from seq import WMDSeq
 from mix import WMDMix
-
-sys.path.append('../../lib')
-from default import getdef
-from log import log_err
-
-def get(ip, port=None):
-    try:
-        res = re.match('(\d{1,3}\.\d{1,3}\.\d{1,3}\.)\d{1,3}', ip).groups()
-        if len(res) != 1:
-            log_err('Failed to get subscribers, invalid address')
-            return None
-        net = res[0]
-        mds_max = getdef('MDS_MAX')
-        if not mds_max:
-            log_err('Failed to get subscribers, mds_max=0')
-            return None
-        sub = []
-        for i in range(mds_max):
-            addr = '%s%d' % (net, i + 1) 
-            sub.append((addr, port))
-        return sub
-    except:
-        log_err('Failed to get subscribers')
-        return None
 
 class WMDSrv(object):
     def __init__(self, ip):
