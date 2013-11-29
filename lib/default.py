@@ -53,7 +53,7 @@ WMD_HEARTBEAT_INTERVAL = 2 # sec
 
 DEBUG = True
 LOG_ERR = True
-LOG_FILE = True
+LOG_FILE = False
 NET_ADAPTER = 'eth0'
         
 def getdef(attr):
@@ -66,4 +66,3 @@ def getdef(attr):
         if res and 1 == len(res.groups()):
             return int(res.groups()[0])
     return None
-            

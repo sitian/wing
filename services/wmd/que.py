@@ -18,13 +18,12 @@
 #      MA 02110-1301, USA.
 
 import sys
+import seq
 import idx
 from sub import getsub
-from json import loads
 
 sys.path.append('../../lib')
-from log import log_file, log_clean
-from log import log, log_err
+from log import log_file, log_clean, log, log_err, log_get
 from default import DEBUG
 import net
 
@@ -35,16 +34,19 @@ WMD_QUE_CNT = 2
 WMD_QUE_ACTIVE = 1
 WMD_QUE_INACTIVE = 2
 
-WMD_QUE_SHOW_CMD = True
+WMD_QUE_SHOW_LEN = True
+WMD_QUE_SHOW_MIN = True
 WMD_QUE_SHOW_HEAD = True
 WMD_QUE_SHOW_CAND = True
-WMD_QUE_SHOW_UPDATE = True
+WMD_QUE_SHOW_HIT = False
+WMD_QUE_SHOW_STAT = False
 WMD_QUE_SHOW_TRACK = False
+WMD_QUE_SHOW_UPDATE = False
 
 class WMDQue(object):
     def __init__(self, ip, total, quorum):
         log_clean(self)
-        self._idx = {}
+        self._min = {}
         self._rec = {}
         self._que = {}
         self._cnt = {}
@@ -55,19 +57,15 @@ class WMDQue(object):
         self._chosen = {}
         self._que_addr = {}
         self._total = total
-        self._active = total
-        self._quorum = quorum
+        self._available = total
         self._addr = net.aton(ip)
+        self._quorum = quorum
+        self._active = 0
         
     def _show_cand(self):
         if WMD_QUE_SHOW_CAND:
             if self._cand:
                 log(self, 'cand=%s' % str(self._cand))
-                
-    def _show_cmd(self, addr, cmd):
-        if WMD_QUE_SHOW_CMD:
-            index = cmd[0]
-            log(self, '%s, cnt=%d, hits=%d, cmd=%s' % (net.ntoa(addr), self._cnt[index], self._hits[index], str(cmd)))
     
     def _show_head(self):
         if WMD_QUE_SHOW_HEAD:
@@ -75,7 +73,22 @@ class WMDQue(object):
             for i in self._que:
                 if self._que[i]:
                     head.append((net.ntoa(i), self._que[i][0][0]))
-            log(self, 'head, %s' % str(head))
+            if head:
+                log(self, 'head=%s' % str(head))
+    
+    def _show_len(self):
+        if WMD_QUE_SHOW_LEN:
+            que_len = []
+            for i in self._que:
+                if self._que[i]:
+                    que_len.append((net.ntoa(i), len(self._que[i])))
+            if que_len:
+                log(self, 'len=%s' % str(que_len))
+    
+    def _show_hit(self, addr, cmd):
+        if WMD_QUE_SHOW_HIT:
+            index = cmd[0]
+            log(self, '%s, cnt=%d, hits=%d, index=%s' % (net.ntoa(addr), self._cnt[index], self._hits[index], index))
     
     def _show_track(self, track):
         if WMD_QUE_SHOW_TRACK:
@@ -85,24 +98,39 @@ class WMDQue(object):
             
     def _show_update(self, addr, index):
         if WMD_QUE_SHOW_UPDATE:
-            idx.show(self, '[vis]', index, addr)
-                
+            log(self, '[vis] %s, index=%s' % (net.ntoa(addr), index))
+    
+    def _show_min(self):
+        if WMD_QUE_SHOW_MIN:
+            que_min = []
+            for i in self._min:
+                que_min.append((net.ntoa(i), self._min[i]))
+            if que_min:
+                log(self, 'min=%s' % str(que_min))
+    
+    def _show_stat(self):
+        if WMD_QUE_SHOW_STAT:
+            self._show_len()
+            self._show_min()
+            self._show_head()
+            self._show_cand()
+              
     def _hit(self, cmd):
         index = cmd[0]
         if not self._cnt.has_key(index):
-            log_err(self, 'no index')
-            raise Exception('WMDQue: no index')
+            log_err(self, 'failed to hit (no index)')
+            raise Exception(log_get(self, 'no index'))
         hits = self._hits[index]
         if hits >= self._total:
-            log_err(self, 'out of range')
-            raise Exception("WMDQue: out of range")
+            log_err(self, 'failed to hit (out of range)')
+            raise Exception(log_get(self, 'out of range'))
         hits += 1
         self._hits[index] = hits
         if hits == self._quorum:
             pos = -1
             length = len(self._cand)
             for i in range(length):
-                if idx.compare(index, self._cand[i][0]) > 0:
+                if idx.idxcmp(index, self._cand[i][0]) > 0:
                     pos = i
                     break
             if pos >= 0:
@@ -117,8 +145,8 @@ class WMDQue(object):
             self._hits.update({index:0})
         total = self._cnt[index]
         if total >= self._total:
-            log_err(self, 'out of range')
-            raise Exception('WMDQue: out of range')
+            log_err(self, 'failed to count (out of range)')
+            raise Exception(log_get(self, 'out of range'))
         self._cnt[index] = total + 1
         
     def _validate(self, addr, index):
@@ -132,19 +160,30 @@ class WMDQue(object):
         return 0
     
     def _chkactive(self):
-        count = self._total
+        count = 0
+        total = self._total
         for i in self._stat:
             if self._stat[i] == WMD_QUE_INACTIVE:
-                count -= 1
+                total -= 1
+            elif self._stat[i] == WMD_QUE_ACTIVE:
+                count += 1
         self._active = count
+        self._available = total
+        if self._active > self._available:
+            log_err(self, 'failed to check active queues')
+            return False
+        else:
+            return True
         
     def mkactive(self, addr):
         if not self._stat.has_key(addr):
+            if self._active + 1 > self._available:
+                log_err(self, 'failed to make a queue active (out of range)')
+                return False
             self._stat.update({addr:WMD_QUE_ACTIVE})
         else:
             self._stat[addr] = WMD_QUE_ACTIVE
-        self._chkactive()
-        return True
+        return self._chkactive()
     
     def mkinactive(self, rep, suspect): #rep: reporter, suspect: suspect list
         if len(suspect) >= self._quorum:
@@ -183,17 +222,16 @@ class WMDQue(object):
         for i in suspect_nodes:
             self._stat.update({i:WMD_QUE_INACTIVE})
         
-        self._chkactive()
-        return True
+        return self._chkactive()
     
     def _append(self, addr, cmd):
         try:
             self._count(cmd)
-            n = self._idx.get(addr)
-            if not n or idx.compare(cmd[0], n) < 0:            
-                self._idx.update({addr:cmd[0]})
+            n = self._min.get(addr)
+            if not n or idx.idxcmp(cmd[0], n) < 0:            
+                self._min.update({addr:cmd[0]})
                 self._hit(cmd)
-                self._show_cmd(addr, cmd)
+                self._show_hit(addr, cmd)
             if not self._que.has_key(addr):
                 self._que.update({addr:[cmd]})
             else:
@@ -201,7 +239,7 @@ class WMDQue(object):
             log_file(self, 'que.' + str(addr), cmd[0])
         except:
             log_err(self, 'failed to append, addr=%s' % net.ntoa(addr))
-            raise Exception('WMDQue: failed to append')
+            raise Exception(log_get(self, 'failed to append'))
     
     def _chkvis(self, vis, addr, pos):
         if not DEBUG:
@@ -217,7 +255,7 @@ class WMDQue(object):
         vis = {}
         self._show_track(track)
         for index in track:
-            identity = idx.getid(index)
+            identity = idx.idxid(index)
             src = self._que_addr.get(identity)
             if not src or not self._rec.has_key(src):
                 continue
@@ -225,19 +263,19 @@ class WMDQue(object):
             for pos in range(length):
                 item = self._rec[src][pos]
                 n = item[WMD_QUE_IDX]
-                if idx.compare(n, index) <= 0:
+                if idx.idxcmp(n, index) <= 0:
                     count = len(item[WMD_QUE_CNT])
-                    if not item[WMD_QUE_CNT].has_key(addr):
-                        item[WMD_QUE_CNT].update({addr:None})
+                    if addr not in item[WMD_QUE_CNT]:
+                        item[WMD_QUE_CNT].append(addr)
                         count += 1
-                    if count < self._quorum and src != self._addr:
-                        if self._lst.has_key(src) and idx.compare(n, self._lst[src]) <= 0:
+                    if count < self._quorum:
+                        if self._lst.has_key(src) and idx.idxcmp(n, self._lst[src]) <= 0:
                             count += 1
-                    if count == self._quorum:
+                    elif count == self._quorum:
                         cmd = self._rec[src][pos][WMD_QUE_CMD]
                         if self._chkvis(vis, src, pos) < 0:
-                            log_err(self, 'failed to make a command visible, addr=%s' % net.ntoa(src))
-                            raise Exception('WMDQue: failed to make a command visible')
+                            log_err(self, 'failed to update, addr=%s' % net.ntoa(src))
+                            raise Exception(log_get(self, 'failed to update'))
                         vis.update({src:pos})
                         self._append(src, cmd)
                         self._show_update(src, n)
@@ -254,13 +292,13 @@ class WMDQue(object):
     def _check(self, addr, index=None):
         if self._stat.has_key(addr):
             if self._stat[addr] == WMD_QUE_INACTIVE:
-                log(self, 'failed to check (inactive queue), addr=%s' % net.ntoa(addr))
+                log(self, 'reject to add a cmd to an inactive queue, addr=%s' % net.ntoa(addr))
                 return -1
         else:
-            self._stat.update({addr:WMD_QUE_ACTIVE})
+            self.mkactive(addr)
             
         if index:
-            identity = idx.getid(index)
+            identity = idx.idxid(index)
             src = self._que_addr.get(identity)
             if not src:
                 self._que_addr.update({identity:addr})
@@ -269,11 +307,8 @@ class WMDQue(object):
                 return -1
         return 0
     
-    def _extract(self, cmd):
-        return loads(cmd)
-    
     def _is_chosen(self, index):
-        identity, sn = idx.extract(index)
+        identity, sn = idx.idxdec(index)
         if self._chosen.has_key(identity) and sn <= self._chosen[identity]:
             return True
         else:
@@ -282,62 +317,64 @@ class WMDQue(object):
     def add(self, addr, index, cmd, update):
         if self._validate(addr, index) < 0:
             log_err(self, 'failed to add, addr=%s' % net.ntoa(addr))
-            raise Exception('WMDQue: failed to add')
+            raise Exception(log_get(self, 'failed to add'))
         
         if self._check(addr, index) < 0:
             return
         
         log_file(self, addr, index)
-        n, c, t = self._extract(cmd) #index:n, command:c, track:t
-        if self._is_chosen(n):
+        track, orig_index, orig_cmd = seq.unpack(cmd) 
+        if self._is_chosen(orig_index):
             return
         
-        rec = [index, (n, c), {addr:None}]
+        rec = [index, (orig_index, orig_cmd), [addr]]
         if self._rec.has_key(addr):
-            self._rec[addr].append(rec)
+            if index not in (item[WMD_QUE_IDX] for item in self._rec[addr]):
+                self._rec[addr].append(rec)
         else:
             self._rec.update({addr:[rec]})
-        
+            
         self._lst.update({addr:index})
         if update:
-            self._update(addr, t)
+            self._update(addr, track)
     
     def _remove_from_que(self, addr, index):
         pos = -1
-        chk = False
+        val = None
+        diff = False
         remove = False
-        smallest = None
         total = len(self._que[addr])
         
         if not total:
             return
         
-        if index != self._idx[addr]:
-            chk = True
+        if index != self._min[addr]:
+            diff = True
             
         for i in range(total):
             cmd = self._que[addr][i]
-            if cmd[0] != index:
-                if remove and chk and idx.compare(cmd[0], index) < 0:
+            n = cmd[0]
+            if n != index:
+                if remove and diff and idx.idxcmp(n, index) < 0:
                     break
-                elif not smallest or idx.compare(cmd[0], smallest) < 0:
-                    smallest = cmd[0]
+                if not val or idx.idxcmp(n, val) < 0:
+                    val = n
                     if remove:
                         self._hit(cmd)
-                        self._show_cmd(addr, cmd)
+                        self._show_hit(addr, cmd)
             else:
                 pos = i
-                if smallest and idx.compare(smallest, index) < 0:
+                if val and idx.idxcmp(val, index) < 0:
                     break
                 remove = True
         
         if pos >= 0:
             del self._que[addr][pos]
-            if not chk:
-                if smallest:
-                    self._idx[addr] = smallest
+            if not diff:
+                if val:
+                    self._min[addr] = val
                 else:
-                    del self._idx[addr]
+                    del self._min[addr]
     
     def _remove(self, index):
         #remove from queues
@@ -349,7 +386,7 @@ class WMDQue(object):
         for addr in empty:
             del self._que[addr]
         
-        #remove from record lists
+        # remove from record lists
         empty = []
         for addr in self._rec:
             length = len(self._rec[addr])
@@ -364,6 +401,7 @@ class WMDQue(object):
             del self._rec[addr]
         del self._hits[index]
         del self._cnt[index]
+        self._show_stat()
     
     def track(self):
         ret = []
@@ -372,37 +410,51 @@ class WMDQue(object):
                 ret.append(self._lst[i])
         return ret
     
+    def track_peers(self):
+        ret = []
+        for i in self._lst:
+            if self._stat[i] == WMD_QUE_ACTIVE and i != self._addr:
+                ret.append(self._lst[i])
+        return ret
+    
     def _get_possible_hits(self, index):
         cnt = 0
-        for i in self._que:
+        for i in self._stat:
             if self._stat[i] == WMD_QUE_ACTIVE:
-                if not self._idx.has_key(i) or idx.compare(index, self._idx[i]) < 0: 
+                if not self._min.has_key(i) or idx.idxcmp(index, self._min[i]) < 0: 
                     cnt += 1  
-        return cnt + self._hits[index]
+        return cnt + self._hits[index] + self._available - self._active
     
     def _is_safe(self, index):
-        if self._hits[index] == self._active:
+        if self._hits[index] == self._available:
             return True
-        cnt = 0
+        
+        count = 0
         for i in self._que:
             if len(self._que[i]) > 0:
                 if index == self._que[i][0][0]:
-                    cnt += 1
-                    if cnt == self._quorum:
+                    count += 1
+                    if count == self._quorum:
                         return True
-        self._show_head()
-        self._show_cand()
+        
+        count = 0
         checked = []
+        self._show_stat()
         for i in self._que:
             chk = False
-            if len(self._que[i]) > 0 and index != self._que[i][0][0]:
-                for cmd in self._que[i]:
-                    n = cmd[0]
-                    if n == index:
-                        chk = True
-                        break
-                    elif idx.compare(n, index) < 0:
-                        break
+            if len(self._que[i]) > 0: 
+                if index == self._que[i][0][0]:
+                    count += 1
+                    if count == self._quorum:
+                        return True
+                else:
+                    for cmd in self._que[i]:
+                        n = cmd[0]
+                        if n == index:
+                            chk = True
+                            break
+                        elif idx.idxcmp(n, index) < 0:
+                            break
             if chk:
                 for cmd in self._que[i]:
                     n = cmd[0]
@@ -413,8 +465,32 @@ class WMDQue(object):
                     if self._get_possible_hits(n) >= self._quorum:
                         return False
                     checked.append(n)
-        return True
+                count += 1
+                if count == self._quorum:
+                    return True
+        return False
     
+    def chkoff(self):
+        init  = False
+        sn_min = None
+        sn_max = None
+        for i in self._lst:
+            if self._stat[i] == WMD_QUE_ACTIVE:
+                sn = idx.idxsn(self._lst[i])
+                if not init:
+                    sn_min = sn
+                    sn_max = sn
+                    init = True
+                else:
+                    if sn < sn_min:
+                        sn_min = sn
+                    elif sn > sn_max:
+                        sn_max = sn
+        if init:
+            return sn_max - sn_min
+        else:
+            return 0
+        
     def _choose(self):
         if len(self._cand) > 0:
             cmd = self._cand[0]
@@ -422,7 +498,7 @@ class WMDQue(object):
             if self._is_safe(index):
                 del self._cand[0]
                 self._remove(index)
-                identity, sn = idx.extract(index)
+                identity, sn = idx.idxdec(index)
                 self._chosen.update({identity:sn})
                 log_file(self, 'cmd', index)
                 return cmd

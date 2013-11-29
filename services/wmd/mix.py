@@ -21,32 +21,35 @@ import sys
 import idx
 from reg import WMDReg
 from hdl import WMDHdl
+from threading import Lock
 
 sys.path.append('../../lib')
 from default import WMD_MIX_PORT
-from default import DEBUG
-from log import log_err
+from log import log, log_err, log_get
 import net
 
-WMD_MIX_SHOW_RECV = True
-WMD_MIX_SHOW_DELIVER = True
+WMD_MIX_SHOW_POP = True
+WMD_MIX_SHOW_RECV = False
 
 class WMDMix(WMDReg):
     def __init__(self, ip, cmd, seq):
         WMDReg.__init__(self, ip, WMD_MIX_PORT)
         self._hdl = WMDHdl()
+        self._lock = Lock()
         self._suspect = {}
         self._cmd = cmd
         self._seq = seq
     
     def _show_recv(self, index):
         if WMD_MIX_SHOW_RECV:
-            idx.show(self, '[rcv]', index, self.get_addr(idx.getid(index)))
+            log(self, '[rcv] index=%s' % index)
     
-    def _show_deliver(self, index):
-        if WMD_MIX_SHOW_DELIVER:
-            idx.show(self, '[ + ]', index, self._seq.get_addr(idx.getid(index)))
-            
+    def _show_pop(self, index):
+        if WMD_MIX_SHOW_POP:
+            identity, sn = idx.idxdec(index)
+            addr = self._seq.get_addr(identity)
+            log(self, '[ + ] %s, sn=%d' % (net.ntoa(addr), sn))
+        
     def _fault(self, addr):
         self._suspect.update({addr:None})
         return self._cmd.mkinactive(self._suspect)
@@ -57,12 +60,22 @@ class WMDMix(WMDReg):
         
     def _deliver(self, addr, index, cmd):
         self._cmd.add(addr, index, cmd, update=True)
-        while True:
-            n, c = self._cmd.pop() #n:index, c:command
-            if not n:
-                break
-            self._show_deliver(n)
-            self._hdl.proc(c)
+        self._seq.update(cmd)
+        
+    def _pop(self):
+        self._lock.acquire()
+        try:
+            while True:
+                orig_index, orig_cmd = self._cmd.pop()
+                if not orig_index:
+                    break
+                self._hdl.proc(orig_cmd)
+                self._show_pop(orig_index)
+        except:
+            log_err(self, 'failed to pop')
+            raise Exception(log_get(self, 'failed to pop'))
+        finally:
+            self._lock.release()
     
     def _recv(self, addr):
         try:
@@ -71,13 +84,11 @@ class WMDMix(WMDReg):
             return (index, cmd)
         except:
             log_err(self, 'failed to receive, addr=%s' % net.ntoa(addr))
-            return (None, None)
+            raise Exception(log_get(self, 'failed to receive'))
     
     def _proc(self, addr):
         while True:
             index, cmd = self._recv(addr)
-            if not index:
-                break
             self._deliver(addr, index, cmd)
-            self._seq.update(cmd)
+            self._pop()
     

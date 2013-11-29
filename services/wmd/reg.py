@@ -46,6 +46,7 @@ class WMDReg(Thread):
         self._start = {}
         self._stop = {}
         self._sub = {}
+        self._ip = ip
     
     def _register(self):
         pass
@@ -59,11 +60,17 @@ class WMDReg(Thread):
     def _live(self, addr):
         pass
     
+    def _start_proc(self, addr):
+        try:
+            self._proc(addr)
+        except:
+            log_err(self, 'failed to process')
+    
     def _start_sub(self, addr):
         self._sub[addr].start()
         self._start.update({addr:Event()})
         self._stop.update({addr:Event()})
-        t = Thread(target=self._proc, args=(addr,))
+        t = Thread(target=self._start_proc, args=(addr,))
         t.setDaemon(True)
         t.start()
         self._start[addr].wait()
@@ -87,6 +94,10 @@ class WMDReg(Thread):
     def get_addr(self, identity):
         return self._sub_addr.get(identity)
     
+    @property
+    def identity(self):
+        return idx._id2str(chr(int(self._ip.split('.')[3])))
+        
     def run(self):
         self._register()
         while True:
@@ -101,7 +112,7 @@ class WMDReg(Thread):
                 port = args['port']
                 index = args['index']
                 heartbeat = args['hb']
-                identity = idx.getid(index)
+                identity = idx.idxid(index)
                 
                 exist = False
                 addr = net.aton(ip)

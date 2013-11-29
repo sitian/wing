@@ -20,7 +20,6 @@
 import re
 import sys
 import zmq
-import idx
 import time
 
 from idx import WMDIndex
@@ -33,8 +32,7 @@ from default import zmqaddr, getdef
 from log import log, log_err
 import net
 
-WMD_SUB_SHOW_ADDR = True
-WMD_SUB_SHOW_DISCONNECT = True
+WMD_SUB_SHOW_IP = True
 
 def getsub(ip, port=None):
     try:
@@ -68,16 +66,11 @@ class WMDSub(WMDIndex, Thread):
         self._port = port
         self._ip = ip
     
-    def _show_addr(self, ip, identity):
-        if WMD_SUB_SHOW_ADDR:
-            log(self, '<< %s (id=%s)' % (ip, str(identity)))
-            
-    def _show_disconnect(self):
-        if WMD_SUB_SHOW_DISCONNECT:
-            log(self, 'cannot connect to %s' % self._ip)
+    def _show_ip(self, ip):
+        if WMD_SUB_SHOW_IP:
+            log(self, '<< ' + ip)
             
     def __init__(self, ip, port, index, heartbeat=False, fault=None, live=None):
-        self._show_addr(ip, idx.getid(index))
         WMDIndex.__init__(self, index)
         Thread.__init__(self)
         self._heartbeat = heartbeat
@@ -85,16 +78,23 @@ class WMDSub(WMDIndex, Thread):
         self._addr = net.aton(ip)
         self._fault = fault
         self._live = live
+        self._show_ip(ip)
     
     def _remove(self):
-        if self._fault:
-            return self._fault(self._addr)
-        else:
+        try:
+            if self._fault:
+                return self._fault(self._addr)
             return True
+        except:
+            log_err(self, 'failed to remove')
+            return False
         
     def _keep_alive(self):
-        if self._live:
-            self._live(self._addr)
+        try:
+            if self._live:
+                self._live(self._addr)
+        except:
+            log_err(self, 'failed to keep alive')
     
     def remove(self):
         self._start.set()
@@ -120,9 +120,10 @@ class WMDSub(WMDIndex, Thread):
                 if sock.recv(zmq.NOBLOCK) == 'l':
                     self._keep_alive()
                     err = 0
+            except:
+                log_err(self, 'failed to receive heartbeat, %s' % self._ip)
             finally:
                 if err:
-                    self._show_disconnect()
                     if self._remove():
                         context.destroy()
                         self._destroy()

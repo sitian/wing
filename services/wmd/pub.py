@@ -19,6 +19,7 @@
 
 import sys
 import zmq
+import idx
 
 from idx import WMDIndex
 from threading import Thread
@@ -26,9 +27,9 @@ from json import dumps, loads
 
 sys.path.append('../../lib')
 from default import WMD_HEARTBEAT_PORT, zmqaddr
-from log import log, log_err
+from log import log, log_err, log_get
 
-WMD_PUB_SHOW_ADDR = True
+WMD_PUB_SHOW_IP = True
 
 class WMDPub(WMDIndex, Thread):
     def _init_sock(self, ip, port):
@@ -38,11 +39,15 @@ class WMDPub(WMDIndex, Thread):
         self._port = port
         self._ip = ip
     
-    def __init__(self, ip, port):
+    def __init__(self, ip, port, index=idx.idxgen()):
+        WMDIndex.__init__(self, index)
         Thread.__init__(self)
-        WMDIndex.__init__(self)
         self._init_sock(ip, port)
     
+    def _show_ip(self, ip):
+        if WMD_PUB_SHOW_IP:
+            log(self, '>> ' + ip)
+        
     def register(self, sub, heartbeat=False):
         if not sub:
             return
@@ -62,11 +67,8 @@ class WMDPub(WMDIndex, Thread):
             sock.close()
             if not buf or not loads(buf):
                 log_err(self, 'failed to connect')
-                raise Exception(self, 'failed to connect')
-            if WMD_PUB_SHOW_ADDR:
-                log(self, '>> %s' % addr[0])
-        if WMD_PUB_SHOW_ADDR:
-            log(self, '[run] %s' % self._ip)
+                raise Exception(log_get(self, 'failed to connect'))
+            self._show_ip(addr[0])
     
     def close(self):
         if self._sock:

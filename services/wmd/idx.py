@@ -19,60 +19,70 @@
 
 import sys
 import uuid
+import base64
 from threading import Lock
 from json import dumps, loads
 
 sys.path.append('../../lib')
-from log import log, log_err
+from log import log, log_err, log_get
 import net
 
-WMD_IDX_SEPERATOR = '.'
+WMD_IDX_SEP = '.'
+WMD_IDX_CMP_ID_FIRST = False
 
-def getid(index):
-    return int(str(index).split(WMD_IDX_SEPERATOR)[0])
+def _sn2str(n):
+    return hex(n)[2:]
 
-def getsn(index):
-    return int(str(index).split(WMD_IDX_SEPERATOR)[1])
+def _str2sn(s):
+    return int(s, 16)
+    
+def _id2str(identity):
+    return base64.urlsafe_b64encode(identity).rstrip('=')
 
-def extract(index):
-    i, s = str(index).split(WMD_IDX_SEPERATOR)
-    return (int(i), int(s))
+def idxid(index):
+    return str(index).split(WMD_IDX_SEP)[0]
 
-def compare(index1, index2):
-    i1 = str(index1).split(WMD_IDX_SEPERATOR)
-    i2 = str(index2).split(WMD_IDX_SEPERATOR)
-    id1 = int(i1[0])
-    id2 = int(i2[0])
-    if id1 < id2:
+def idxsn(index):
+    return _str2sn(str(index).split(WMD_IDX_SEP)[1])
+
+def idxdec(index):
+    i, s = str(index).split(WMD_IDX_SEP)
+    return (i, _str2sn(s))
+
+def idxenc(identity, sn):
+    return identity + WMD_IDX_SEP + _sn2str(sn)
+
+def _idgen():
+    return _id2str(uuid.uuid4().bytes)
+
+def idxgen(identity=None, sn=0):
+    if not identity:
+        return idxenc(_idgen(), sn)
+    else:
+        return idxenc(identity, sn)
+
+def idxcmp(i1, i2):
+    id1, sn1 = idxdec(i1)
+    id2, sn2 = idxdec(i2)
+    if WMD_IDX_CMP_ID_FIRST:
+        ret = cmp(id1, id2)
+        if ret != 0:
+            return ret
+    if sn1 < sn2:
         return -1
-    elif id1 > id2:
+    elif sn1 > sn2:
         return 1
     else:
-        sn1 = int(i1[1])
-        sn2 = int(i2[1])
-        if sn1 < sn2:
-            return -1
-        elif sn1 > sn2:
-            return 1
+        if not WMD_IDX_CMP_ID_FIRST:
+            return cmp(id1, id2)
         else:
             return 0
 
-def show(cls, string, index, addr=None):
-    if not addr:
-        log(cls, '%s id=%d, sn=%d' % (string, getid(index), getsn(index)))
-    else:
-        log(cls, '%s %s, sn=%d' % (string, net.ntoa(addr), getsn(index)))
-
 class WMDIndex(object):
-    def __init__(self, index=None):
-        if not index:
-            self.__sn = 0
-            self.__id = uuid.uuid4().int
-        else:
-            self.__sn = getsn(index)
-            self.__id = getid(index)
-        self.__lock = Lock()
+    def __init__(self, index):
         self.__que = {}
+        self.__lock = Lock()
+        self.__id, self.__sn = idxdec(index)
     
     def _idxchg(self):
         self.__sn = self.__sn + 1
@@ -80,7 +90,7 @@ class WMDIndex(object):
     def idxnxt(self, index, cmd):
         self.__lock.acquire()
         try:
-            identity, sn = extract(index)
+            identity, sn = idxdec(index)
             if identity == self.__id:
                 if sn > self.__sn:
                     self.__que.update({sn:(index, cmd)})
@@ -92,10 +102,10 @@ class WMDIndex(object):
             log_err(self, 'failed to update')
         finally:
             self.__lock.release()
-            
+    
     def idxchk(self):
-        return '%d%s%d' % (self.__id, WMD_IDX_SEPERATOR, self.__sn)
-
+        return idxenc(self.__id, self.__sn)
+     
     def idxget(self):
         self.__lock.acquire()
         res = self.idxchk()
@@ -114,8 +124,8 @@ class WMDIndex(object):
     def _idxrcv(self, sock):
         buf = sock.recv()
         if buf:
-            msg = loads(buf)
-            return (msg[0], msg[1])
+            args = loads(buf)
+            return (args[0], args[1])
         else:
             return (None, None) 
     
@@ -136,20 +146,20 @@ class WMDIndex(object):
                         index, cmd = self._idxrcv(sock)
                     except:
                         log_err(self, 'failed to receive')
-                        raise Exception('WMDIndex: failed to receive')
+                        raise Exception(log_get(self, 'failed to receive'))
                     finally:
                         self.__lock.acquire()
                     if not index:
                         log_err(self, 'invalid index')
-                        raise Exception('WMDIndex: invalid index')
-                    if getid(index) != self.__id:
+                        raise Exception(log_get(self, 'invalid index'))
+                    identity, sn = idxdec(index)
+                    if identity != self.__id:
                         log_err(self, 'invalid id')
-                        raise Exception('WMDIndex: invalid id')
-                    sn = getsn(index)
+                        raise Exception(log_get(self, 'invalid id'))
                     if sn == self.__sn:
                         self._idxchg()
                         return (index, cmd)
-                    elif getsn(index) > self.__sn:
+                    elif sn > self.__sn:
                         self.__que.update({sn:(index, cmd)})
             finally:
                 self.__lock.release()

@@ -18,35 +18,38 @@
 #      MA 02110-1301, USA.
 
 import os
-from default import DEBUG, LOG_ERR, LOG_FILE
 from path import PATH_LOG
+from default import DEBUG, LOG_ERR, LOG_FILE
 
-def _cls_name(cls):
-    if cls:
-        return cls.__class__.__name__
+def _getcls(obj):
+    if obj:
+        return obj.__class__.__name__
     else:
         return 'Debug'
+    
+def log_get(obj, s):
+    return _getcls(obj) + ': ' + str(s)
 
-def log(cls, s):
+def log(obj, s):
     if DEBUG:
-        print _cls_name(cls) + ': ' + str(s)
+        print log_get(obj, s)
 
-def log_err(cls, s):
+def log_err(obj, s):
     if DEBUG and LOG_ERR:
-        print _cls_name(cls) + ': ' + str(s)
+        print log_get(obj, s)
 
-def log_file(cls, name, s):
+def log_file(obj, name, s):
     if DEBUG and LOG_FILE:
-        name = _cls_name(cls).lower() + '.' + str(name)    
+        name = _getcls(obj).lower() + '.' + str(name)
         path = os.path.join(PATH_LOG, name)
         f = open(path, 'a')
         if f:
             f.write(str(s) + '\n')
             f.close()
 
-def log_clean(cls):
+def log_clean(obj):
     if DEBUG:
-        prefix = _cls_name(cls).lower()
+        prefix = _getcls(obj).lower()
         for name in os.listdir(PATH_LOG):
             path = os.path.join(PATH_LOG, name)
             if not os.path.isdir(path):
