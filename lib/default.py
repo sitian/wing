@@ -42,7 +42,7 @@ DB_ADDR = '192.168.154.185'
 SRV_ADDR = '192.168.154.185'
 
 def zmqaddr(addr, port):
-    return 'tcp://%s:%d' % (addr, port)
+    return 'tcp://%s:%d' % (str(addr), int(port))
 
 WROUTE_ADDR = zmqaddr(SRV_ADDR, WROUTE_PORT)
 WROUTE_BACKEND_ADDR = zmqaddr(SRV_ADDR, WROUTE_BACKEND_PORT)

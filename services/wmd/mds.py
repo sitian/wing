@@ -28,14 +28,24 @@ class WMDSrv(object):
         self._seq = WMDSeq(ip, self._cmd)
         self._mix = WMDMix(ip, self._cmd, self._seq)
         
-    def run(self):
+    def _start(self):
         self._cmd.start()
         self._mix.start()
         self._seq.start()
+    
+    def _join(self):
         self._cmd.join()
         self._mix.join()
         self._seq.join()
-
+        
+    def _register(self):
+        self._seq.register()
+        
+    def run(self):
+        self._start()
+        self._register()
+        self._join()
+    
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         sys.exit(0)

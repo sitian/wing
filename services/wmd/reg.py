@@ -48,9 +48,6 @@ class WMDReg(Thread):
         self._sub = {}
         self._ip = ip
     
-    def _register(self):
-        pass
-    
     def _proc(self, addr):
         pass
     
@@ -99,7 +96,6 @@ class WMDReg(Thread):
         return idx._id2str(chr(int(self._ip.split('.')[3])))
         
     def run(self):
-        self._register()
         while True:
             try:
                 sub = None

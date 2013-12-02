@@ -26,6 +26,8 @@ from idx import WMDIndex
 from threading import Event
 from threading import Thread
 
+WMD_SUB_RETRY_INTERVAL = 1 # sec
+
 sys.path.append('../../lib')
 from default import WMD_HEARTBEAT_INTERVAL, WMD_HEARTBEAT_PORT
 from default import zmqaddr, getdef
@@ -59,7 +61,6 @@ class WMDSub(WMDIndex, Thread):
         self._context = zmq.Context()
         self._sock = self._context.socket(zmq.SUB)
         self._sock.setsockopt(zmq.SUBSCRIBE, "")
-        self._sock.connect(zmqaddr(ip, port))
         self._release = False
         self._start = Event()
         self._stop = Event()
@@ -133,8 +134,18 @@ class WMDSub(WMDIndex, Thread):
                         context = zmq.Context()
                         sock = context.socket(zmq.REQ)
                         sock.connect(zmqaddr(self._ip, WMD_HEARTBEAT_PORT))
-                        
+    
+    def _connect(self):
+        while True:
+            try:
+                self._sock.connect(zmqaddr(self._ip, self._port))
+            except:
+                time.sleep(WMD_SUB_RETRY_INTERVAL)
+                continue
+            break
+        
     def run(self):
+        self._connect()
         if self._heartbeat:
             t = Thread(target=self._start_heartbeat)
             t.setDaemon(True)

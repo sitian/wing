@@ -25,8 +25,8 @@ from que import WMDQue
 from threading import Lock
 from threading import Event
 
-WQUE_CMD_IDX_OFFSET = 10
-WQUE_CMD_CHK_INTERVAL = 10
+WQUE_CMD_IDX_OFFSET = 32
+WQUE_CMD_CHK_INTERVAL = 32
 WQUE_CMD_WAIT_TIME = 1 # sec
 
 sys.path.append('../../lib')

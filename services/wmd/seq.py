@@ -53,7 +53,7 @@ class WMDSeq(WMDReg):
         if WMD_SEQ_SHOW_FWD:
             log(self, '[fwd] sn=%d' % idx.idxsn(index))
         
-    def _register(self):
+    def register(self):
         ip = net.ntoa(self._addr)
         sub = getsub(ip, WMD_MIX_PORT)
         if not sub:
@@ -91,19 +91,15 @@ class WMDSeq(WMDReg):
         finally:
             self._fwd_lock.release()
     
-    def _wait(self):
-        show = False
+    def _can_start(self):
         while not self._pub:
-            if not show:
-                log(self, 'wait for registration')
-                show = True
             time.sleep(1)
             
     def _proc(self, addr):
-        self._wait()
-        while True:
-            index, cmd = self._recv(addr)
-            self._forward(index, cmd)
+        if self._can_start():
+            while True:
+                index, cmd = self._recv(addr)
+                self._forward(index, cmd)
     
     def update(self, cmd):
         track, orig_index, orig_cmd = unpack(cmd)
