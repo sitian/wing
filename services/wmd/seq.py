@@ -94,6 +94,7 @@ class WMDSeq(WMDReg):
     def _can_start(self):
         while not self._pub:
             time.sleep(1)
+        return True
             
     def _proc(self, addr):
         if self._can_start():

@@ -29,14 +29,14 @@ class WMDSrv(object):
         self._mix = WMDMix(ip, self._cmd, self._seq)
         
     def _start(self):
-        self._cmd.start()
         self._mix.start()
         self._seq.start()
+        self._cmd.start()
     
     def _join(self):
         self._cmd.join()
-        self._mix.join()
         self._seq.join()
+        self._mix.join()
         
     def _register(self):
         self._seq.register()
