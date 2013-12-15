@@ -25,8 +25,8 @@ import sys
 sys.path.append('../../lib')
 from privacy import PUBLIC, PRIVATE
 from wroute import WRoute
-from log import log_err
 from wctrl import WCtrl
+from log import log_err
 
 class Network(WHubDev):
     def state(self, name, privacy, host):

@@ -84,7 +84,7 @@ class WMDSub(WMDIndex, Thread):
     def _remove(self):
         try:
             if self._fault:
-                return self._fault(self._addr)
+                self._fault(self._addr)
             return True
         except:
             log_err(self, 'failed to remove')
@@ -94,8 +94,10 @@ class WMDSub(WMDIndex, Thread):
         try:
             if self._live:
                 self._live(self._addr)
+            return True
         except:
             log_err(self, 'failed to keep alive')
+            return False
     
     def remove(self):
         self._start.set()

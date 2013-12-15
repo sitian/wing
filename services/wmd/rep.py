@@ -95,7 +95,7 @@ class WMDRep(Thread):
         context = zmq.Context()
         
         if WMD_REP_SHOW_STAT:
-            log(self, 'report=>start, @%s, leader=%s' % (net.ntoa(self._addr), net.ntoa(leader)))
+            log(self, 'report=>start, %s, leader=%s' % (net.ntoa(self._addr), net.ntoa(leader)))
                 
         try:
             sock = context.socket(zmq.REQ)
@@ -125,20 +125,20 @@ class WMDRep(Thread):
                     self._send(sock, {'cmd':WMD_REP_ACCEPT, 'id':rep_id, 'addr':self._addr, 'nodes':nodes})
                     stat = WMD_REP_ACCEPT
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>accept (rep_id=%s)' % rep_id)
+                        log(self, 'report=>accept (id=%s)' % rep_id)
                 elif cmd == WMD_REP_ACCEPT:
                     self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
                     stat = WMD_REP_STOP
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>stop (rep_id=%s)' % rep_id)
+                        log(self, 'report=>stop (id=%s)' % rep_id)
                 elif cmd == WMD_REP_WAIT:
                     time.sleep(WMD_REP_SLEEP_TIME)
                     self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>wait (rep_id=%s)' % rep_id)
+                        log(self, 'report=>wait (id=%s)' % rep_id)
                 elif cmd == WMD_REP_STOP:
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>finish (rep_id=%s)' % rep_id)
+                        log(self, 'report=>finish (id=%s)' % rep_id)
                     ret = 0
                     break 
         finally:
@@ -164,7 +164,7 @@ class WMDRep(Thread):
         rep_id = idx._idgen()
         
         if WMD_REP_SHOW_STAT:
-            log(self, 'coordinate=>start, @%s (rep_id=%s)' % (net.ntoa(self._addr), rep_id))
+            log(self, 'coordinate=>start, %s (id=%s)' % (net.ntoa(self._addr), rep_id))
             
         try:
             while True:
@@ -209,24 +209,24 @@ class WMDRep(Thread):
                         stop = True
                     
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'coordinate=>accept, %s (rep_id=%s)' % (net.ntoa(addr), rep_id))
+                        log(self, 'coordinate=>accept, %s (id=%s)' % (net.ntoa(addr), rep_id))
                 elif cmd == WMD_REP_STOP:
                     if not stop:
                         cmd = WMD_REP_WAIT
                         if WMD_REP_SHOW_STAT:
-                            log(self, 'coordinate=>wait, %s (rep_id=%s)' % (net.ntoa(addr), rep_id))
+                            log(self, 'coordinate=>wait, %s (id=%s)' % (net.ntoa(addr), rep_id))
                     else:
                         if addr in self._nodes:
                             log(self, 'found an available node')
                             break
                         stopped.update({addr:None})
                         if WMD_REP_SHOW_STAT:
-                            log(self, 'coordinate=>stop, %s (rep_id=%s)' % (net.ntoa(addr), rep_id))
+                            log(self, 'coordinate=>stop, %s (id=%s)' % (net.ntoa(addr), rep_id))
                 self._send(self._sock, {'cmd':cmd, 'id':rep_id})
                 if len(stopped) == total:
                     ret = 0
                     if WMD_REP_SHOW_STAT:
-                        log(self, 'coordinate=>finish (rep_id=%s)' % rep_id)
+                        log(self, 'coordinate=>finish (id=%s)' % rep_id)
                     break
         except:
             self._free_sock()

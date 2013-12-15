@@ -52,14 +52,14 @@ class WMDMix(WMDReg):
         
     def _fault(self, addr):
         self._suspect.update({addr:None})
-        return self._cmd.mkinactive(self._suspect)
+        self._cmd.mkinactive(self._suspect)
     
     def _live(self, addr):
         if self._suspect.has_key(addr):
             del self._suspect[addr]
         
     def _deliver(self, addr, index, cmd):
-        self._cmd.add(addr, index, cmd, update=True)
+        self._cmd.add(addr, index, cmd)
         self._seq.update(cmd)
         
     def _pop(self):

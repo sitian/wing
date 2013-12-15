@@ -22,7 +22,7 @@ import sys
 sys.path.append('../../lib')
 from log import log
 
-WMD_HDL_CHK_INTERVAL = 10
+WMD_HDL_CHK_INTERVAL = 16
 WMD_HDL_SHOW_CNT = False
 
 class WMDHdl(object):

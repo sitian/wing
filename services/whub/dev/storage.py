@@ -17,23 +17,23 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-from util import wpfs
+from util import ofs
 from device import WHubDev
 
 class Storage(WHubDev):
     def register(self, name):
-        wpfs.create(name)
+        ofs.create(name)
         return True
     
     def unregister(self, name):
-        wpfs.destroy(name)
+        ofs.destroy(name)
         return True
     
     def mount(self, name):
-        wpfs.start(name)
+        ofs.start(name)
         return True
     
     def unmount(self, name):
-        wpfs.stop(name)
+        ofs.stop(name)
         return True
     

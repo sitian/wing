@@ -31,7 +31,7 @@ from default import WMD_REG_PORT, WMD_MIX_PORT, WMD_SEQ_PORT
 from log import log, log_err, log_get
 import net
 
-WMD_SEQ_CHKOFF = True
+WMD_SEQ_CHK_SLOW = True
 WMD_SEQ_SHOW_FWD = False
 
 def pack(track, index, cmd):
@@ -44,8 +44,7 @@ class WMDSeq(WMDReg):
     def __init__(self, ip, cmd):
         WMDReg.__init__(self, ip, WMD_REG_PORT)
         self._addr = net.aton(ip)
-        self._fwd_lock = Lock()
-        self._rcv_lock = Lock()
+        self._lock = Lock()
         self._pub = None
         self._cmd = cmd
     
@@ -62,34 +61,29 @@ class WMDSeq(WMDReg):
         self._pub.register(sub, heartbeat=True)
     
     def _recv(self, addr):
-        self._rcv_lock.acquire()
         try:
-            if WMD_SEQ_CHKOFF:
-                self._cmd.chkoff()
-            index, cmd = self._sub[addr].recv()
-            return (index, cmd)
+            if WMD_SEQ_CHK_SLOW:
+                self._cmd.chkslow()
+            return self._sub[addr].recv()
         except:
             log_err(self, 'failed to receive, %s' % net.ntoa(addr))
             self._stop_sub(addr)
             raise Exception(log_get(self, 'failed to receive'))
-        finally:
-            self._rcv_lock.release()
     
     def _forward(self, index, cmd):
-        self._fwd_lock.acquire()
+        self._lock.acquire()
         try:
-            new_index = self._pub.idxget()
-            track = self._cmd.track_peers()
-            track.append(new_index)
-            new_cmd = pack(track, index, cmd)
-            self._cmd.add(self._addr, new_index, new_cmd)
-            self._pub.send(new_cmd, new_index)
-            self._show_fwd(new_index)
+            track = self._cmd.track()
+            seq_index = self._pub.idxget()
+            seq_cmd = pack(track, index, cmd)
+            self._pub.send(seq_cmd, seq_index)
+            self._cmd.add(self._addr, seq_index, seq_cmd)
+            self._show_fwd(seq_index)
         except:
             log_err(self, 'failed to forward, index=%s' % index)
             raise Exception(log_get(self, 'failed to forward'))
         finally:
-            self._fwd_lock.release()
+            self._lock.release()
     
     def _can_start(self):
         while not self._pub:

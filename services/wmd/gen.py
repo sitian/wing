@@ -23,13 +23,10 @@ from sub import getsub
 from json import dumps
 
 sys.path.append('../../lib')
-from default import WMD_GEN_PORT, WMD_REG_PORT
-from default import LOCAL_HOST, WMD_PORT
-from default import zmqaddr, getdef
-from path import PATH_WING_CONFIG
+from default import WMD_GEN_PORT, WMD_REG_PORT, WMD_PORT
+from default import zmqaddr
 from log import log_err
 from pub import WMDPub
-import net
 
 class WMDGen(object):
     def _init_sock(self, ip):

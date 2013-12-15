@@ -18,47 +18,32 @@
 #      MA 02110-1301, USA.
 
 import sys
-import idx
-
 from rep import WMDRep
 from que import WMDQue
+from sub import getsub
 from threading import Lock
 from threading import Event
 
-WQUE_CMD_IDX_OFFSET = 32
-WQUE_CMD_CHK_INTERVAL = 32
-WQUE_CMD_WAIT_TIME = 1 # sec
+WMD_CMD_WAIT_TIME = 1 # sec
+WMD_CMD_CHK_INTERVAL = 4
 
 sys.path.append('../../lib')
 from log import log, log_err, log_get
-from default import getdef
 import net
 
 class WMDCmd(WMDRep):
     def __init__(self, ip):
         WMDRep.__init__(self, ip)
-        self._mds_max = getdef('MDS_MAX')
-        self._quorum = int(self._mds_max / 2) + 1
-        self._que = WMDQue(ip, self._mds_max, self._quorum)
+        self._que = WMDQue(ip)
         self._event = Event()
         self._lock = Lock()
         self._event.set()
-        self._index = {}
-        self._head = []
         self._count = 0
-    
-    def _check(self, index):
-        identity, sn = idx.idxdec(index)
-        if self._index.has_key(identity) and sn < self._index[identity]:
-            return -1
-        else:
-            self._index.update({identity:sn})
-            return 0
     
     def mkactive(self, addr):
         self._lock.acquire()
         try:
-            return self._que.mkactive(addr)
+            self._que.mkactive(addr)
         except:
             log_err(self, 'failed to make active, addr=%s' % net.ntoa(addr))
             raise Exception(log_get(self, 'failed to make active'))
@@ -68,20 +53,34 @@ class WMDCmd(WMDRep):
     def mkinactive(self, suspect):
         self._lock.acquire()
         try:
-            return self._que.mkinactive(self, suspect)
+            suspect = self._que.chkinactive(suspect)
+            if not suspect:
+                return True
+            nodes = {}
+            sub = getsub(net.ntoa(self._addr))
+            for item in sub:
+                addr = net.aton(item[0])
+                if addr not in suspect:
+                    nodes.update({addr:None})
+            leader = self.get_leader(nodes)
+            if leader == self._addr:
+                ret = self.coordinate(suspect, len(nodes))
+            else:
+                ret = self.report(leader, suspect)
+            if ret < 0:
+                log_err(self, 'failed to report, suspect=%s' % str(suspect.keys()))
+                raise Exception(log_get(self, 'failed to report'))
+            self._que.mkinactive(suspect)
         except:
-            log_err(self, 'failed to make inactive, suspect=%s' % str(suspect))
+            log_err(self, 'failed to make inactive, suspect=%s' % str(suspect.keys()))
             raise Exception(log_get(self, 'failed to make inactive'))
         finally:
             self._lock.release()
     
-    def add(self, addr, index, cmd, update=False):
+    def add(self, addr, index, cmd):
         self._lock.acquire()
         try:
-            if self._check(index) < 0:
-                log(self, 'cannot add (this is a duplicated command)')
-                return
-            self._que.add(addr, index, cmd, update)
+            return self._que.add(addr, index, cmd)
         except:
             log_err(self, 'failed to add, %s' % net.ntoa(addr))
             raise Exception(log_get(self, 'failed to add'))
@@ -98,19 +97,18 @@ class WMDCmd(WMDRep):
         finally:
             self._lock.release()
     
-    def chkoff(self):
+    def chkslow(self):
         self._lock.acquire()
         try:
             self._count += 1
-            if self._count == WQUE_CMD_CHK_INTERVAL:
+            if self._count == WMD_CMD_CHK_INTERVAL:
                 self._count = 0
+            addr = self._que.chkslow()
             if not self._event.is_set():
-                off = self._que.chkoff()
-                if off < WQUE_CMD_IDX_OFFSET:
+                if not addr or addr == self._addr:
                     self._event.set()
             elif 0 == self._count:
-                off = self._que.chkoff()
-                if off >= WQUE_CMD_IDX_OFFSET:
+                if addr and addr != self._addr:
                     self._event.clear()
         except:
             log_err(self, 'failed to check offset')
@@ -119,25 +117,15 @@ class WMDCmd(WMDRep):
             self._lock.release()
         
         if not self._event.is_set():
-            self._event.wait(timeout=WQUE_CMD_WAIT_TIME)
-            
-    def track_peers(self):
-        self._lock.acquire()
-        try:
-            return self._que.track_peers()
-        except:
-            log_err(self, 'failed to track peers')
-            raise Exception(log_get(self, 'failed to track peers'))
-        finally:
-            self._lock.release()
+            self._event.wait(timeout=WMD_CMD_WAIT_TIME)
     
     def pop(self):
         self._lock.acquire()
         try:
             index, cmd = self._que.choose()
             if index and not self._event.is_set():
-                off = self._que.chkoff()
-                if off < WQUE_CMD_IDX_OFFSET:
+                addr = self._que.chkslow()
+                if not addr or addr == self._addr:
                     self._event.set()
             return (index, cmd)
         except:
