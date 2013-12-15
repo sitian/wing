@@ -2,4 +2,4 @@ WMDS: A Meta-Data Service Using Index-Based Consensus
 
 1) Generator:	gen.py
 2) Sequencer:	seq.py
-3) Mixer:		mix.py
+3) Mixer:	mix.py
