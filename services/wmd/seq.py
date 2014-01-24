@@ -70,15 +70,17 @@ class WMDSeq(WMDReg):
             self._stop_sub(addr)
             raise Exception(log_get(self, 'failed to receive'))
     
+    def _wrapper(self, track, index, cmd):
+        new_index = self._pub.idxget()
+        new_cmd = pack(track, index, cmd)
+        return (new_index, new_cmd)
+        
     def _forward(self, index, cmd):
         self._lock.acquire()
         try:
-            track = self._cmd.track()
-            seq_index = self._pub.idxget()
-            seq_cmd = pack(track, index, cmd)
-            self._pub.send(seq_cmd, seq_index)
-            self._cmd.add(self._addr, seq_index, seq_cmd)
-            self._show_fwd(seq_index)
+            new_index, new_cmd = self._cmd.wrap(self._addr, index, cmd, self._wrapper)
+            self._pub.send(new_cmd, new_index)
+            self._show_fwd(new_index)
         except:
             log_err(self, 'failed to forward, index=%s' % index)
             raise Exception(log_get(self, 'failed to forward'))
@@ -89,7 +91,7 @@ class WMDSeq(WMDReg):
         while not self._pub:
             time.sleep(1)
         return True
-            
+    
     def _proc(self, addr):
         if self._can_start():
             while True:

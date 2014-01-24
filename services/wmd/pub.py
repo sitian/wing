@@ -89,6 +89,6 @@ class WMDPub(WMDIndex, Thread):
                 else:
                     sock.send('l')
             except:
-                log_err(self, 'cannot communicate with subscribers')
+                log_err(self, 'failed to communicate')
                 break
         sock.close()

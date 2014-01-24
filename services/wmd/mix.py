@@ -36,7 +36,6 @@ class WMDMix(WMDReg):
         WMDReg.__init__(self, ip, WMD_MIX_PORT)
         self._hdl = WMDHdl()
         self._lock = Lock()
-        self._suspect = {}
         self._cmd = cmd
         self._seq = seq
     
@@ -51,12 +50,10 @@ class WMDMix(WMDReg):
             log(self, '[ + ] %s, sn=%d' % (net.ntoa(addr), sn))
         
     def _fault(self, addr):
-        self._suspect.update({addr:None})
-        self._cmd.mkinactive(self._suspect)
+        self._cmd.mkinactive(addr)
     
     def _live(self, addr):
-        if self._suspect.has_key(addr):
-            del self._suspect[addr]
+        self._cmd.mkactive(addr)
         
     def _deliver(self, addr, index, cmd):
         self._cmd.add(addr, index, cmd)
@@ -83,7 +80,7 @@ class WMDMix(WMDReg):
             self._show_recv(index)
             return (index, cmd)
         except:
-            log_err(self, 'failed to receive, addr=%s' % net.ntoa(addr))
+            log_err(self, 'failed to receive from %s' % net.ntoa(addr))
             raise Exception(log_get(self, 'failed to receive'))
     
     def _proc(self, addr):

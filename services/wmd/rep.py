@@ -20,234 +20,287 @@
 import sys
 import zmq
 import idx
+import seq
 import time
-from threading import Event
+from copy import copy
+from bar import WMDBar
 from threading import Thread
 from json import loads, dumps
 
 sys.path.append('../../lib')
-from default import zmqaddr, WMD_REP_PORT
-from log import log, log_err
+from default import zmqaddr, WMD_REP_PORT, WMD_REP_SYNC_PORT
+from log import log, log_err, log_get
 import net
 
 WMD_REP_START = 1
 WMD_REP_ACCEPT = 2
 WMD_REP_STOP = 3
 WMD_REP_WAIT = 4
-WMD_REP_ABORT = 5
+WMD_REP_EXIT = 5
 
 WMD_REP_SLEEP_TIME = 1 #sec
-WMD_REP_TIMEOUT = 3 * 1000 #msec 
-WMD_REP_LONG_TIMEOUT = 9 * 1000 # msec
+WMD_REP_TIMEOUT = 5 * 1000 #msec 
+WMD_REP_LONG_TIMEOUT = 10 * 1000 # msec
 
-WMD_REP_SHOW_STAT = True
+WMD_REP_SHOW_REQ = True
+WMD_REP_SHOW_SYNC_CMDS = True
+WMD_REP_SHOW_SYNC_ARGS = True
 
 class WMDRep(Thread):
     def _init_sock(self, ip):
         self._context = zmq.Context()
         self._sock = self._context.socket(zmq.REP)
         self._sock.bind(zmqaddr(ip, WMD_REP_PORT))
-        
-    def _free_sock(self):
-        self._context.destroy()
-        self._context = None
-        self._poller = None
-        self._sock = None
     
     def __init__(self, ip):
         Thread.__init__(self)
+        self._ip = ip
         self._res = -1
-        self._total = 0
-        self._nodes = {}
+        self._lst = None
+        self._nodes = None
+        self._target = None
         self._init_sock(ip)
-        self._stop = Event()
-        self._start = Event()
+        self._barrier = WMDBar()
         self._addr = net.aton(ip)
+   
+    def _show_sync_args(self, args):
+        if WMD_REP_SHOW_SYNC_ARGS:
+            end = args.get('end')
+            dest = args.get('dest')
+            if dest and end:
+                log(self, "sync, args={'dest':%s, 'end':%s}" % (net.ntoa(dest), end))
+            else:
+                log(self, 'sync, args=%s' % str(args))
+                
+    def _show_sync_cmds(self, cmds):
+        if WMD_REP_SHOW_SYNC_CMDS:
+            log(self, 'sync, cmds=%s' % str(cmds))
+            
+    def _show_req(self, cmd):
+        if WMD_REP_SHOW_REQ:
+            if cmd == WMD_REP_START:
+                log(self, 'report=>start')
+            if cmd == WMD_REP_ACCEPT:
+                log(self, 'report=>accept')
+            elif cmd == WMD_REP_STOP:
+                log(self, 'report=>stop')
+            elif cmd == WMD_REP_WAIT:
+                log(self, 'report=>wait')
+            elif cmd == WMD_REP_EXIT:
+                log(self, 'report=>exit')
     
     def _send(self, sock, buf):
         sock.send(dumps(buf))
     
-    def _recv(self, sock, timeout=WMD_REP_TIMEOUT):
+    def _send_req(self, sock, cmd, args=None):
+        if args:
+            args.update({'cmd':cmd})
+        else:
+            args = {'cmd':cmd}
+        self._send(sock, args)
+        self._show_req(cmd)
+        
+    def _recv(self, sock, timeout=None):
         if timeout:
             poller = zmq.Poller()
             poller.register(sock, zmq.POLLIN)
             socks = dict(poller.poll(timeout))
             poller.unregister(sock)
             if not socks or socks.get(sock) != zmq.POLLIN:
-                return None
-        res = sock.recv()
-        if res:
-            return loads(res)
-        else:
-            return None
+                return
+        buf = sock.recv()
+        if buf:
+            return loads(buf)
     
-    def get_leader(self, nodes):
+    def _get_leader(self, nodes):
         leader = None
         for i in nodes:
             if not leader or leader < i:
                 leader = i
         return leader
-            
-    def _report(self, leader, nodes):
+    
+    def _add_cmd(self, addr, index, cmd):
+        pass
+    
+    def _sync(self, addr, lst, args):
+        start = idx.idxinc(lst)
+        dest = args.get('dest')
+        end = args.get('end')
+        self._show_sync_args(args)
+        if not dest or not end:
+            return
+        if dest != self._addr and idx.idxcmp(start, end) < 0:
+            try:
+                context = zmq.Context()
+                sock = context.socket(zmq.REQ)
+                sock.connect(zmqaddr(net.ntoa(dest), WMD_REP_SYNC_PORT))
+                self._send(sock, {'addr':addr, 'start':start, 'end':end})
+                cmds = self._recv(sock, WMD_REP_TIMEOUT)
+                self._show_sync_cmds(cmds)
+                index = start
+                track = {}
+                for item in cmds:
+                    cmd = seq.pack(track, item[0], item[1])
+                    self._add_cmd(addr, index, cmd, False)
+                    index = idx.idxinc(index)
+            finally:
+                context.destroy()
+        
+    def _report(self, addr, lst, leader):
         ret = -1
         rep_id = None
-        stat = WMD_REP_START
+        curr = WMD_REP_START
         context = zmq.Context()
         
-        if WMD_REP_SHOW_STAT:
-            log(self, 'report=>start, %s, leader=%s' % (net.ntoa(self._addr), net.ntoa(leader)))
-                
         try:
             sock = context.socket(zmq.REQ)
             sock.connect(zmqaddr(net.ntoa(leader), WMD_REP_PORT))
-            self._send(sock, {'cmd':WMD_REP_START})
+            req = {'src':self._addr, 'target':addr, 'lst':lst}
+            self._send_req(sock, WMD_REP_START, req)
             while True:
-                args = self._recv(sock)
+                args = self._recv(sock, WMD_REP_TIMEOUT)
                 if not args or not args.has_key('cmd'):
-                    log_err(self, 'failed to report, invalid command')
+                    log_err(self, 'failed to report (no reply)')
                     break
                 
                 cmd = args['cmd']
-                if cmd != stat and cmd != WMD_REP_WAIT:
-                    log_err(self, 'invalid command, cmd=%d' % cmd)
+                if cmd != curr and cmd != WMD_REP_WAIT:
+                    log_err(self, 'failed to report (invalid command)')
                     break
                 
                 if not args.has_key('id'):
-                    log_err(self, 'no report id, cmd=%d' % cmd)
+                    log_err(self, 'failed to report (no report id)')
                     break
                 
-                if cmd != WMD_REP_START and args['id'] != rep_id:
-                    log_err(self, 'invalid report id, cmd=%d' % cmd)
-                    break
+                if cmd != WMD_REP_START:
+                    if args['id'] != rep_id:
+                        log_err(self, 'failed to report (invalid report id)')
+                        break
+                else:
+                    rep_id = args['id']
+                    req = {'id':rep_id, 'src':self._addr}
                 
                 if cmd == WMD_REP_START:
-                    rep_id = args['id']
-                    self._send(sock, {'cmd':WMD_REP_ACCEPT, 'id':rep_id, 'addr':self._addr, 'nodes':nodes})
-                    stat = WMD_REP_ACCEPT
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>accept (id=%s)' % rep_id)
+                    curr = WMD_REP_ACCEPT
                 elif cmd == WMD_REP_ACCEPT:
-                    self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
-                    stat = WMD_REP_STOP
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>stop (id=%s)' % rep_id)
+                    curr = WMD_REP_STOP
+                    self._sync(addr, lst, args)
                 elif cmd == WMD_REP_WAIT:
                     time.sleep(WMD_REP_SLEEP_TIME)
-                    self._send(sock, {'cmd':WMD_REP_STOP, 'addr':self._addr, 'id':rep_id})
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>wait (id=%s)' % rep_id)
                 elif cmd == WMD_REP_STOP:
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'report=>finish (id=%s)' % rep_id)
                     ret = 0
-                    break 
+                    break
+                self._send_req(sock, curr, req)
         finally:
             context.destroy()
             return ret
-            
-    def report(self, leader, nodes):
-        if not nodes or self._addr in nodes:
-            log_err(self, 'failed to report, invalid parameters')
+        
+    def report(self, addr, lst, nodes):
+        if self._addr not in nodes:
+            log_err(self, 'failed to report (invalid parameters)')
             return -1
         try:
-            return self._report(leader, nodes)
+            leader = self._get_leader(nodes)
+            if not leader:
+                log_err(self, 'failed to report (no leader)')
+                return -1
+            if leader == self._addr:
+                self._lst = lst
+                self._target = addr
+                self._nodes = nodes
+                self._barrier.wait()
+                return self._res
+            else:
+                return self._report(addr, lst, leader)
         except:
             log_err(self, 'failed to report')
             return -1
-        
+    
     def _coordinate(self):
         ret = -1
-        stop = False
-        stopped = {}
-        accepted = {}
-        total = self._total - 1
+        end = None
+        dest = None
+        req_list = []
+        sock = self._sock
         rep_id = idx._idgen()
+        req = {'id':rep_id}
+        req_base = copy(req)
+        curr = WMD_REP_START
+        total = len(self._nodes) - 1
         
-        if WMD_REP_SHOW_STAT:
-            log(self, 'coordinate=>start, %s (id=%s)' % (net.ntoa(self._addr), rep_id))
-            
         try:
-            while True:
-                addr = None
-                args = self._recv(self._sock, timeout=WMD_REP_LONG_TIMEOUT)
+            while ret != 0:
+                args = self._recv(sock, timeout=WMD_REP_LONG_TIMEOUT)
                 if not args or not args.has_key('cmd'):
-                    log_err(self, 'failed to coordinate, invalid command')
+                    log_err(self, 'failed to coordinate')
                     break
                 
                 cmd = args['cmd']
-                if cmd != WMD_REP_START:
-                    if not args.has_key('addr') or not args.has_key('id') or args['id'] != rep_id:
-                        self._send(self._sock, {'cmd':WMD_REP_ABORT})
-                        continue
-                    addr = args['addr']
-                    
-                if stop and cmd != WMD_REP_STOP:
-                    self._send(self._sock, {'cmd':WMD_REP_ABORT})
+                src = args.get('src')
+                off = int(cmd) - curr
+                if not src or src not in self._nodes or (cmd != WMD_REP_START and args.get('id') != rep_id) or off < 0 or off > 1:
+                    self._send_req(sock, WMD_REP_EXIT)
                     continue
                 
-                if cmd == WMD_REP_ACCEPT:
-                    if not args.has_key('nodes'):
-                        log_err(self, 'failed to get nodes')
-                        self._send(self._sock, {'cmd':WMD_REP_ABORT})
+                if off != 0:
+                    cmd = WMD_REP_WAIT
+                    self._send_req(sock, cmd, req_base)
+                    continue
+                
+                if cmd == WMD_REP_START:
+                    target = args.get('target')
+                    if target != self._target:
+                        self._send_req(sock, WMD_REP_EXIT)
                         break
-                    
-                    match = True
-                    nodes = args['nodes']
-                    if len(nodes) != len(self._nodes):
-                        match = False
-                    else:
-                        for i in nodes:
-                            if int(i) not in self._nodes:
-                                match = False
-                                break
-                    if not match:
-                        self._send(self._sock, {'cmd':WMD_REP_ABORT})
-                        break
-                    
-                    accepted.update({addr:None})
-                    if len(accepted) == total:
-                        stop = True
-                    
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'coordinate=>accept, %s (id=%s)' % (net.ntoa(addr), rep_id))
-                elif cmd == WMD_REP_STOP:
-                    if not stop:
-                        cmd = WMD_REP_WAIT
-                        if WMD_REP_SHOW_STAT:
-                            log(self, 'coordinate=>wait, %s (id=%s)' % (net.ntoa(addr), rep_id))
-                    else:
-                        if addr in self._nodes:
-                            log(self, 'found an available node')
-                            break
-                        stopped.update({addr:None})
-                        if WMD_REP_SHOW_STAT:
-                            log(self, 'coordinate=>stop, %s (id=%s)' % (net.ntoa(addr), rep_id))
-                self._send(self._sock, {'cmd':cmd, 'id':rep_id})
-                if len(stopped) == total:
-                    ret = 0
-                    if WMD_REP_SHOW_STAT:
-                        log(self, 'coordinate=>finish (id=%s)' % rep_id)
-                    break
+                    lst = args.get('lst')
+                    if lst and (not end or idx.idxcmp(end, lst) < 0):
+                        end = lst
+                        dest = src
+                
+                self._send_req(sock, cmd, req)
+                if src not in req_list:
+                    req_list.append(src)
+                if len(req_list) == total:
+                    req_list = []
+                    if cmd == WMD_REP_START:
+                        req.update({'dest':dest, 'end':end})
+                        self._sync(target, self._lst, req)
+                        curr = WMD_REP_ACCEPT
+                    elif cmd == WMD_REP_ACCEPT:
+                        req = copy(req_base)
+                        curr = WMD_REP_STOP
+                    elif cmd == WMD_REP_STOP:
+                        ret = 0
         except:
-            self._free_sock()
+            self._context.destroy()
             self._init_sock(net.ntoa(self._addr))
         return ret
     
-    def coordinate(self, nodes, total):
-        if not nodes or self._addr in nodes or total <= 0:
-            log_err(self, 'failed to coordinate, invalid parameters')
-            return -1
-        self._nodes = nodes
-        self._total = total
-        self._start.set()
-        self._stop.wait()
-        self._stop.clear()
-        return self._res
+    def collect(self, addr, start, end):
+        pass
+    
+    def _listen(self):
+        context = zmq.Context()
+        sock = context.socket(zmq.REP)
+        sock.bind(zmqaddr(self._ip, WMD_REP_SYNC_PORT))
+        try:
+            while True:
+                args = self._recv(sock)
+                if not args:
+                    log_err(self, 'failed to listen (no argument)')
+                    continue
+                cmds = self.collect(args['addr'], args['start'], args['end'])
+                self._send(sock, cmds)
+        except:
+            log_err(self, 'failed to listen')
+            raise Exception(log_get(self, 'failed to listen'))
+        finally:
+            context.destroy()
     
     def run(self):
+        Thread(target=self._listen).start()
         while True:
-            self._start.wait()
-            self._start.clear()
+            self._barrier.get()
             self._res = self._coordinate()
-            self._stop.set()
+            self._barrier.put()
     

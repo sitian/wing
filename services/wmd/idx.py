@@ -35,7 +35,13 @@ def _sn2str(n):
 
 def _str2sn(s):
     return int(s, 16)
-    
+
+def _inc_sn(sn):
+    return sn + 1
+
+def _idgen():
+    return _id2str(uuid.uuid4().bytes)
+
 def _id2str(identity):
     return base64.urlsafe_b64encode(identity).rstrip('=')
 
@@ -52,8 +58,9 @@ def idxdec(index):
 def idxenc(identity, sn):
     return identity + WMD_IDX_SEP + _sn2str(sn)
 
-def _idgen():
-    return _id2str(uuid.uuid4().bytes)
+def idxinc(index):
+    identity, sn = idxdec(index)
+    return idxenc(identity, _inc_sn(sn))
 
 def idxgen(identity=None, sn=0):
     if not identity:
@@ -84,8 +91,8 @@ class WMDIndex(object):
         self.__lock = Lock()
         self.__id, self.__sn = idxdec(index)
     
-    def _idxchg(self):
-        self.__sn = self.__sn + 1
+    def _update_sn(self):
+        self.__sn = _inc_sn(self.__sn)
         
     def idxnxt(self, index, cmd):
         self.__lock.acquire()
@@ -95,7 +102,7 @@ class WMDIndex(object):
                 if sn > self.__sn:
                     self.__que.update({sn:(index, cmd)})
                 elif sn == self.__sn:
-                    self._idxchg()
+                    self._update_sn()
                     return True
             return False
         except:
@@ -109,7 +116,7 @@ class WMDIndex(object):
     def idxget(self):
         self.__lock.acquire()
         res = self.idxchk()
-        self._idxchg()
+        self._update_sn()
         self.__lock.release()
         return res
 
@@ -138,14 +145,13 @@ class WMDIndex(object):
                 if self.__que.has_key(self.__sn):
                     index, cmd = self.__que[self.__sn]
                     del self.__que[self.__sn]
-                    self._idxchg()
+                    self._update_sn()
                     return (index, cmd)
                 else:
                     self.__lock.release()
                     try:
                         index, cmd = self._idxrcv(sock)
                     except:
-                        log_err(self, 'failed to receive')
                         raise Exception(log_get(self, 'failed to receive'))
                     finally:
                         self.__lock.acquire()
@@ -157,7 +163,7 @@ class WMDIndex(object):
                         log_err(self, 'invalid id')
                         raise Exception(log_get(self, 'invalid id'))
                     if sn == self.__sn:
-                        self._idxchg()
+                        self._update_sn()
                         return (index, cmd)
                     elif sn > self.__sn:
                         self.__que.update({sn:(index, cmd)})

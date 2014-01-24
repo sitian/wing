@@ -23,7 +23,6 @@ from rec import WMDRec
 
 sys.path.append('../../lib')
 from log import log_file, log_clean, log, log_err, log_get
-from default import getdef
 import net
 
 WMD_QUE_SHOW_HIT = False
@@ -34,18 +33,17 @@ WMD_QUE_SHOW_CAND = False
 WMD_QUE_SHOW_STAT = False
 
 class WMDQue(object):
-    def __init__(self, ip):
+    def __init__(self, ip, quorum, total):
         log_clean(self)
         self._min = {}
         self._que = {}
         self._cnt = {}
         self._hits = {}
         self._cand = []
-        self._addr = net.aton(ip)
-        self._total = getdef('MDS_MAX')
-        self._quorum = int(self._total / 2) + 1
-        self._rec = WMDRec(ip, self._quorum, self._total)
-        
+        self._total = total
+        self._quorum = quorum
+        self._rec = WMDRec(ip, quorum, total)
+    
     def _show_cand(self):
         if WMD_QUE_SHOW_CAND:
             if self._cand:
@@ -140,8 +138,9 @@ class WMDQue(object):
     def add(self, addr, index, cmd):
         log_file(self, addr, index)
         cmds = self._rec.add(addr, index, cmd)
-        for i in cmds:
-            self._append(*i)
+        if cmds:
+            for item in cmds:
+                self._append(*item)
     
     def _remove_from_que(self, addr, index):
         pos = -1
@@ -183,10 +182,10 @@ class WMDQue(object):
     def _remove(self, index):
         for addr in self._que:
             self._remove_from_que(addr, index)
-        self._rec.remove(index)
+        self._rec.recycle(index)
         del self._hits[index]
         del self._cnt[index]
-     
+    
     def _get_possible_hits(self, index):
         cnt = 0
         for i in self._que:
@@ -252,18 +251,24 @@ class WMDQue(object):
     def choose(self):
         return self._choose()
     
-    def track(self):
-        return self._rec.track()
+    def chklst(self, addr):
+        return self._rec.chklst(addr)
     
     def chkslow(self):
         return self._rec.chkslow()
-   
+    
+    def chkinactive(self, addr):
+        return self._rec.chkinactive(addr)
+    
+    def collect(self, addr, start, end):
+        return self._rec.collect(addr, start, end)
+    
     def mkactive(self, addr):
         self._rec.mkactive(addr)
     
-    def mkinactive(self, suspect):
-        self._rec.mkinactive(suspect)
-    
-    def chkinactive(self, suspect):
-        return self._rec.chkinactive(suspect)
+    def mkinactive(self, addr):
+        self._rec.mkinactive(addr)
+        
+    def track(self):
+        return self._rec.track()
     

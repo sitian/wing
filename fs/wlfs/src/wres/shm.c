@@ -238,13 +238,12 @@ static inline int wres_shm_get_peer_info(wresource_t *resource, wres_page_t *pag
 		int overlap = wres_page_search_holder_list(resource, page, src);
 		
 		info->total = wres_page_calc_holders(page) - overlap;
-		if (!wres_page_search_holder_list(resource, page, resource->owner))
-			info->total++;
 	} else if (flags & WRES_RDONLY) {
 		int i;
 		
 		for (i = 0; i < page->nr_holders; i++) { 
 			int ret = wres_get_peer(page->holders[i], &info->list[i]);
+			
 			if (ret)
 				return ret;
 		}
@@ -255,6 +254,18 @@ static inline int wres_shm_get_peer_info(wresource_t *resource, wres_page_t *pag
 
 
 #ifdef MODE_FAST_REPLY
+static inline int wres_shm_get_peer_info_fast(wresource_t *resource, wres_page_t *page, wres_shm_peer_info_t *info)
+{	
+	int flags = wres_get_flags(resource);
+	int ret = wres_shm_get_peer_info(resource, page, info);
+	
+	if (!ret && (flags & WRES_RDWR))
+		if (!wres_page_search_holder_list(resource, page, resource->owner))
+			info->total++;
+	return ret;
+}
+
+
 static inline int wres_shm_cache_add(wres_page_t *page, wres_req_t *req)
 {
 	int ret = 0;
@@ -384,11 +395,11 @@ int wres_shm_fast_reply(wres_page_t *page, wres_req_t *req)
 	int clk;
 	int hid = 0;
 	int ret = 0;
-	int first = 0;
+	int head = 0;
+	int tail = 0;
 	int total = -1;
 	int nr_lines = 0;
 	int nr_peers = 0;
-	int finalize = 0;
 	int diff[WRES_LINE_MAX];
 	int htab[WRES_LINE_MAX];
 	wresource_t *resource = &req->resource;
@@ -402,8 +413,8 @@ int wres_shm_fast_reply(wres_page_t *page, wres_req_t *req)
 			return 0;
 		clk = page->version;	
 	} else {
+		tail = 1;
 		clk = page->oclk;
-		finalize = 1;
 	}
 	
 	ret = wres_shm_check_fast_reply(page, req, &hid, &nr_peers);
@@ -420,21 +431,22 @@ int wres_shm_fast_reply(wres_page_t *page, wres_req_t *req)
 			wres_print_err(resource, "failed to calculate htab");
 			return -EINVAL;
 		}
-		for (i = 0, total = 0; i < WRES_LINE_MAX; i++) {
+		total = 0;
+		for (i = 0; i < WRES_LINE_MAX; i++) {
 			if (diff[i] != 0) {
 				total++;
 				if (htab[i] == hid) {
 					nr_lines++;
 					if (1 == total)
-						first = 1;
+						head = 1;
 				}
 			}
 		}
-		if (!total)
-			first = hid == 1;
+		if (!total && !reply)
+			reply = hid == 1;
 	}
 	
-	if ((nr_lines > 0) || reply || first || finalize) {
+	if ((nr_lines > 0) || reply || head || tail) {
 		char *ptr;
 		wresource_t res = *resource;
 		wres_id_t src = wres_get_id(resource);		
@@ -447,9 +459,9 @@ int wres_shm_fast_reply(wres_page_t *page, wres_req_t *req)
 			return -EINVAL;
 		}
 #endif
-		if (first)
+		if (head)
 			size += WRES_PAGE_DIFF_SIZE;
-		if (finalize) {
+		if (tail) {
 			size += sizeof(wres_shm_peer_info_t);
 			if (flags & WRES_RDONLY)
 				size += page->nr_holders * sizeof(wres_desc_t);
@@ -479,13 +491,13 @@ int wres_shm_fast_reply(wres_page_t *page, wres_req_t *req)
 		new_args->total = total;
 
 		ptr = (char *)&new_args[1] + nr_lines * sizeof(wres_line_t);
-		if (first) {
+		if (head) {
 			wres_shm_pack_diff(page->diff, ptr);
 			ptr += WRES_PAGE_DIFF_SIZE;
 			wres_set_flags(&res, WRES_DIFF);
 		}
-		if (finalize) {
-			ret = wres_shm_get_peer_info(resource, page, (wres_shm_peer_info_t *)ptr);
+		if (tail) {
+			ret = wres_shm_get_peer_info_fast(resource, page, (wres_shm_peer_info_t *)ptr);
 			if (ret) {
 				wres_print_err(resource, "failed to get peer info");
 				goto out;
@@ -620,15 +632,14 @@ int wres_shm_send_to_silent_holders(wres_page_t *page, wres_req_t *req)
 	}
 	
 	if ((flags & WRES_RDWR) && !wres_shm_is_silent_holder(page) && wres_pg_active(page)) {
-		int nr_silent_holders = page->nr_silent_holders;
-		
-		if (nr_silent_holders > 0) {
+		if (page->nr_silent_holders > 0) {
 			int i;
 			int count = 0;
 			int *htab = NULL;
 			int hid = page->hid;
 			int cmd = args->cmd;
 			int nr_sources = page->nr_holders;
+			int nr_silent_holders = page->nr_silent_holders;
 			wres_id_t src = wres_get_id(resource);
 			wres_id_t *silent_holders;
 			char path[WRES_PATH_MAX];
@@ -706,10 +717,10 @@ int wres_shm_do_check_holder(wres_page_t *page, wres_req_t *req)
 {
 	int i;
 	int ret = 0;
-	int first = 0;
+	int tail = 0;
+	int head = 0;
 	int total = 0;
 	int nr_lines = 0;
-	int finalize = 0;
 	int diff[WRES_LINE_MAX];
 	wres_shmfault_args_t *args = (wres_shmfault_args_t *)req->buf;
 	wresource_t *resource = &req->resource;
@@ -737,22 +748,27 @@ int wres_shm_do_check_holder(wres_page_t *page, wres_req_t *req)
 			if (wres_shm_can_cover(page, i)) {
 				nr_lines++;
 				if (1 == total)
-					first = 1;
+					head = 1;
 			}
 		}
 	}
-
-	if (!total) {
+	
+	if (src != page->owner) {
+		if (!total) {
+			if (page->holders[0] != src)
+				tail = page->hid == 1;
+			else
+				tail = page->hid == 2;
+		} else
+			tail = head;
+	} else if (!total && !reply) {
 		if (page->holders[0] != src)
-			first = page->hid == 1;
+			reply = page->hid == 1;
 		else
-			first = page->hid == 2;
+			reply = page->hid == 2;
 	}
 	
-	if (src != page->owner)
-		finalize = first;
-	
-	if ((nr_lines > 0) || reply || first || finalize) {
+	if ((nr_lines > 0) || reply || head || tail) {
 		char *ptr;
 		wresource_t res = *resource;
 		wres_shm_notify_proposer_args_t *new_args;
@@ -764,9 +780,9 @@ int wres_shm_do_check_holder(wres_page_t *page, wres_req_t *req)
 			return -EINVAL;
 		}
 #endif
-		if (first)
+		if (head)
 			size += WRES_PAGE_DIFF_SIZE;
-		if (finalize) {
+		if (tail) {
 			size += sizeof(wres_shm_peer_info_t);
 			if (flags & WRES_RDONLY)
 				size += page->nr_holders * sizeof(wres_desc_t);
@@ -796,12 +812,12 @@ int wres_shm_do_check_holder(wres_page_t *page, wres_req_t *req)
 		new_args->total = total;
 
 		ptr = (char *)&new_args[1] + nr_lines * sizeof(wres_line_t);
-		if (first) {
+		if (head) {
 			wres_shm_pack_diff(page->diff, ptr);
 			ptr += WRES_PAGE_DIFF_SIZE;
 			wres_set_flags(&res, WRES_DIFF);
 		}
-		if (finalize) {
+		if (tail) {
 			ret = wres_shm_get_peer_info(resource, page, (wres_shm_peer_info_t *)ptr);
 			if (ret) {
 				wres_print_err(resource, "failed to get peer info");
@@ -1186,7 +1202,7 @@ int wres_shm_deliver(wres_page_t *page, wres_req_t *req)
 		wres_pg_mkread(page);
 		page->version = clk;
 	}
-	if ((page->nr_holders < WRES_PAGE_NR_HOLDERS)) {
+	if (page->nr_holders < WRES_PAGE_NR_HOLDERS) {
 		ret = wres_page_add_holder(resource, page, src);
 		if (ret) {
 			wres_print_err(resource, "failed to add holder");

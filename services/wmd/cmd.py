@@ -29,73 +29,81 @@ WMD_CMD_CHK_INTERVAL = 4
 
 sys.path.append('../../lib')
 from log import log, log_err, log_get
+from default import getdef
 import net
-
+    
 class WMDCmd(WMDRep):
     def __init__(self, ip):
         WMDRep.__init__(self, ip)
-        self._que = WMDQue(ip)
+        total = getdef('MDS_MAX')
+        quorum = int(total / 2) + 1
+        self._que = WMDQue(ip, quorum, total)
         self._event = Event()
         self._lock = Lock()
         self._event.set()
         self._count = 0
     
+    def _add_cmd(self, addr, index, cmd):
+        return self._que.add(addr, index, cmd)
+    
+    def add(self, addr, index, cmd):
+        self._lock.acquire()
+        try:
+            return self._add_cmd(addr, index, cmd)
+        except:
+            log_err(self, 'failed to add, addr=%s' % net.ntoa(addr))
+            raise Exception(log_get(self, 'failed to add'))
+        finally:
+            self._lock.release()
+
+    def wrap(self, addr, index, cmd, wrapper):
+        self._lock.acquire()
+        try:
+            track = self._que.track()
+            new_index, new_cmd = wrapper(track, index, cmd)
+            self._add_cmd(addr, new_index, new_cmd)
+            return (new_index, new_cmd)
+        except:
+            log_err(self, 'failed to wrap, addr=%s' % net.ntoa(addr))
+            raise Exception(log_get(self, 'failed to wrap'))
+        finally:
+            self._lock.release()
+        
     def mkactive(self, addr):
         self._lock.acquire()
         try:
             self._que.mkactive(addr)
         except:
-            log_err(self, 'failed to make active, addr=%s' % net.ntoa(addr))
-            raise Exception(log_get(self, 'failed to make active'))
+            log_err(self, 'failed to mark active node %s' % net.ntoa(addr))
+            raise Exception(log_get(self, 'failed to mark active node'))
         finally:
             self._lock.release()
     
-    def mkinactive(self, suspect):
+    def mkinactive(self, addr):
         self._lock.acquire()
         try:
-            suspect = self._que.chkinactive(suspect)
+            suspect = self._que.chkinactive(addr)
             if not suspect:
-                return True
-            nodes = {}
+                return
+            nodes = []
             sub = getsub(net.ntoa(self._addr))
-            for item in sub:
-                addr = net.aton(item[0])
-                if addr not in suspect:
-                    nodes.update({addr:None})
-            leader = self.get_leader(nodes)
-            if leader == self._addr:
-                ret = self.coordinate(suspect, len(nodes))
-            else:
-                ret = self.report(leader, suspect)
-            if ret < 0:
-                log_err(self, 'failed to report, suspect=%s' % str(suspect.keys()))
+            for s in sub:
+                i = net.aton(s[0])
+                if i not in suspect:
+                    nodes.append(i)
+            lst = self._que.chklst(addr)
+            if self.report(addr, lst, nodes) < 0:
+                log_err(self, 'failed to report')
                 raise Exception(log_get(self, 'failed to report'))
-            self._que.mkinactive(suspect)
+            self._que.mkinactive(addr)
         except:
-            log_err(self, 'failed to make inactive, suspect=%s' % str(suspect.keys()))
-            raise Exception(log_get(self, 'failed to make inactive'))
+            log_err(self, 'failed to mark inactive node %s' % net.ntoa(addr))
+            raise Exception(log_get(self, 'failed to mark inactive node'))
         finally:
             self._lock.release()
     
-    def add(self, addr, index, cmd):
-        self._lock.acquire()
-        try:
-            return self._que.add(addr, index, cmd)
-        except:
-            log_err(self, 'failed to add, %s' % net.ntoa(addr))
-            raise Exception(log_get(self, 'failed to add'))
-        finally:
-            self._lock.release()
-    
-    def track(self):
-        self._lock.acquire()
-        try:
-            return self._que.track()
-        except:
-            log_err(self, 'failed to track')
-            raise Exception(log_get(self, 'failed to track'))
-        finally:
-            self._lock.release()
+    def collect(self, addr, start, end):
+        return self._que.collect(addr, start, end)
     
     def chkslow(self):
         self._lock.acquire()

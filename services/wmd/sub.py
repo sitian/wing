@@ -40,12 +40,12 @@ def getsub(ip, port=None):
     try:
         res = re.match('(\d{1,3}\.\d{1,3}\.\d{1,3}\.)\d{1,3}', ip).groups()
         if len(res) != 1:
-            log_err(None, 'Failed to get subscribers, invalid address')
+            log_err(None, 'failed to get subscribers (invalid address)')
             return None
         net = res[0]
         mds_max = getdef('MDS_MAX')
         if not mds_max:
-            log_err(None, 'Failed to get subscribers, mds_max=0')
+            log_err(None, 'failed to get subscribers, mds_max=0')
             return None
         sub = []
         for i in range(mds_max):
@@ -53,7 +53,7 @@ def getsub(ip, port=None):
             sub.append((addr, port))
         return sub
     except:
-        log_err(None, 'Failed to get subscribers')
+        log_err(None, 'failed to get subscribers')
         return None
     
 class WMDSub(WMDIndex, Thread):
@@ -111,31 +111,37 @@ class WMDSub(WMDIndex, Thread):
         self._release = True
         self._start.set()
     
+    def _try_to_stop_heartbeat(self, context, sock, reconnect=True):
+        if self._remove():
+            context.destroy()
+            self._destroy()
+            return (None, None)
+        else:
+            if reconnect:
+                context.destroy()
+                context = zmq.Context()
+                sock = context.socket(zmq.REQ)
+                sock.connect(zmqaddr(self._ip, WMD_HEARTBEAT_PORT))
+            return (context, sock)
+        
+    
     def _start_heartbeat(self):
         context = zmq.Context()
         sock = context.socket(zmq.REQ)
         sock.connect(zmqaddr(self._ip, WMD_HEARTBEAT_PORT))
-        while True:
-            err = 1
+        while sock:
+            alive = False
             try:
                 sock.send('h')
                 time.sleep(WMD_HEARTBEAT_INTERVAL)
                 if sock.recv(zmq.NOBLOCK) == 'l':
                     self._keep_alive()
-                    err = 0
+                    alive = True
             except:
-                log_err(self, 'failed to receive heartbeat, %s' % self._ip)
+                log_err(self, 'failed to receive heartbeat from %s' % self._ip)
             finally:
-                if err:
-                    if self._remove():
-                        context.destroy()
-                        self._destroy()
-                        break
-                    else:
-                        context.destroy()
-                        context = zmq.Context()
-                        sock = context.socket(zmq.REQ)
-                        sock.connect(zmqaddr(self._ip, WMD_HEARTBEAT_PORT))
+                if not alive:
+                    context, sock = self._try_to_stop_heartbeat(context, sock)
     
     def _connect(self):
         while True:
@@ -145,7 +151,7 @@ class WMDSub(WMDIndex, Thread):
                 time.sleep(WMD_SUB_RETRY_INTERVAL)
                 continue
             break
-        
+    
     def run(self):
         self._connect()
         if self._heartbeat:

@@ -1,0 +1,717 @@
+divert(-1)
+define(NEWPROC,) dnl
+
+define(BARRIER, `{
+	int count;
+	struct sembuf up;
+	struct sembuf down;
+	struct sembuf wait;
+	union semun semun;
+	int bar_sem;
+	int bar_sig;
+	int bar_enter;
+	int bar_leave;
+
+	bar_sem = map[($1).bar_sem];
+	bar_sig = map[($1).bar_sig];
+	bar_enter = map[($1).bar_enter];
+	bar_leave = map[($1).bar_leave];
+	splash_log("Barrier: enter (%d)\n", ($1).bar_sem);
+	
+	memset(&up, 0, sizeof(struct sembuf));
+	memset(&down, 0, sizeof(struct sembuf));
+	memset(&wait, 0, sizeof(struct sembuf));
+	down.sem_op = -1;
+	up.sem_op = 1;
+	
+	splash_log("Barrier: down bar_sem\n");
+	do {
+		if (semop(bar_sem, &down, 1) < 0) {
+			splash_log("semop failed\n");
+			exit(-1);
+		}
+		count = semctl(bar_leave, 0, GETVAL, 0);
+		if (count < 0) {
+			splash_log("Failed to get bar_leave\n");
+			exit(-1);
+		} else if (count > 0) {
+			if (semop(bar_sem, &up, 1) < 0) {
+				splash_log("semop failed\n");
+				exit(-1);
+			}
+		}
+	} while(count);
+	
+	count = semctl(bar_enter, 0, GETVAL, 0);
+	if (count < 0) {
+		splash_log("Failed to get bar_enter\n");
+		exit(-1);
+	}
+	count++;
+	splash_log("Barrier: enter=%d\n", count);
+	if (count == $2) {
+		if ($2 > 1) {
+			splash_log("Barrier: down bar_sig\n");
+			if (semop(bar_sig, &down, 1) < 0) {
+				splash_log("semop failed\n");
+				exit(-1);
+			}
+			semun.val = 0;
+			if (semctl(bar_enter, 0, SETVAL, semun) < 0) {
+				splash_log("failed to set bar_enter\n");
+				exit(-1);
+			}
+			semun.val = $2 - 1;
+			if (semctl(bar_leave, 0, SETVAL, semun) < 0) {
+				splash_log("failed to set bar_leave\n");
+				exit(-1);
+			}
+		}
+		splash_log("Barrier: up bar_sem\n");
+		if (semop(bar_sem, &up, 1) < 0) {
+			splash_log("semop failed\n");
+			exit(-1);
+		}
+	} else {
+		if ($2 > 1) {
+			if (1 == count) {
+				splash_log("Barrier: up bar_sig\n");
+				if (semop(bar_sig, &up, 1) < 0) {
+					splash_log("semop failed\n");
+					exit(-1);
+				}
+			}
+			semun.val = count;
+			if (semctl(bar_enter, 0, SETVAL, semun) < 0) {
+				splash_log("failed to set bar_enter\n");
+				exit(-1);
+			}
+		}
+		splash_log("Barrier: up bar_sem\n");
+		if (semop(bar_sem, &up, 1) < 0) {
+			splash_log("semop failed\n");
+			exit(-1);
+		}
+		if ($2 > 1) {
+			splash_log("Barrier: wait bar_sig\n");
+			if (semop(bar_sig, &wait, 1) < 0) {
+				splash_log("semop failed\n");
+				exit(-1);
+			}
+			if (semop(bar_sem, &down, 1) < 0) {
+				splash_log("semop failed\n");
+				exit(-1);
+			}
+			count = semctl(bar_leave, 0, GETVAL, 0);
+			if (count < 0) {
+				splash_log("Failed to get bar_leave\n");
+				exit(-1);
+			}
+			count--;
+			semun.val = count;
+			if (semctl(bar_leave, 0, SETVAL, semun) < 0) {
+				splash_log("failed to set bar_leave\n");
+				exit(-1);
+			}
+			if (semop(bar_sem, &up, 1) < 0) {
+				splash_log("semop failed\n");
+				exit(-1);
+			}
+		}
+	}
+	splash_log("Barrier: exit (%d)\n", ($1).bar_sem);
+}')
+
+define(BARDEC, `
+struct {
+	int bar_sem;
+	int bar_sig;
+	int bar_enter;
+	int bar_leave;
+} ($1);
+')
+
+define(BARINIT, `{
+    int bar_sem;
+    int bar_sig;
+    int bar_enter;
+    int bar_leave;
+    union semun semun;
+    if (bar_sem_key >= BAR_SEM_KEY + KEY_MAX) {
+        splash_log("failed to create bar_sem\n");
+        exit(-1);
+    }
+    bar_sem = semget(bar_sem_key, 1, DIPC_FLAGS);
+    if (bar_sem < 0) {
+        splash_log("failed to create bar_sem\n");
+        exit(-1);
+    }
+    splash_log("bar_sem: key=%d\n", bar_sem_key);
+    semun.val = 1;
+    if (semctl(bar_sem, 0, SETVAL, semun) < 0) {
+        splash_log("failed to create bar_sem\n");
+        exit(-1);
+    }
+    
+    if (bar_sig_key >= BAR_SIG_KEY + KEY_MAX) {
+        splash_log("failed to create bar_sig\n");
+        exit(-1);
+    }
+    bar_sig = semget(bar_sig_key, 1, DIPC_FLAGS);
+    if (bar_sig < 0) {
+        splash_log("failed to create bar_sig\n");
+        exit(-1);
+    }
+    splash_log("bar_sig: key=%d\n", bar_sig_key);
+    semun.val = 0;
+    if (semctl(bar_sig, 0, SETVAL, semun) < 0) {
+        splash_log("failed to initialize bar_sig\n");
+        exit(-1);
+    }
+    
+    if (bar_enter_key >= BAR_ENTER_KEY + KEY_MAX) {
+        splash_log("failed to create bar_enter\n");
+        exit(-1);
+    }
+    bar_enter = semget(bar_enter_key, 1, DIPC_FLAGS);
+    if (bar_enter < 0) {
+        splash_log("failed to create bar_enter\n");
+        exit(-1);
+    }
+    splash_log("bar_enter: key=%d\n", bar_enter_key);
+    semun.val = 0;
+    if (semctl(bar_enter, 0, SETVAL, semun) < 0) {
+        splash_log("failed to initialize bar_enter\n");
+        exit(-1);
+    }
+    
+    if (bar_leave_key >= BAR_LEAVE_KEY + KEY_MAX) {
+        splash_log("failed to create bar_leave\n");
+        exit(-1);
+    }
+    bar_leave = semget(bar_leave_key, 1, DIPC_FLAGS);
+    if (bar_leave < 0) {
+        splash_log("failed to create bar_leave\n");
+        exit(-1);
+    }
+    splash_log("bar_leave: key=%d\n", bar_leave_key);
+    semun.val = 0;
+    if (semctl(bar_leave, 0, SETVAL, semun) < 0) {
+        splash_log("failed to initialize bar_leave\n");
+        exit(-1);
+    }
+    $1.bar_sem = bar_sem_key;
+    $1.bar_sig = bar_sig_key;
+    $1.bar_enter = bar_enter_key;
+    $1.bar_leave = bar_leave_key;
+    map[bar_sem_key] = bar_sem;
+    map[bar_sig_key] = bar_sig;
+    map[bar_enter_key] = bar_enter;
+    map[bar_leave_key] = bar_leave;
+    bar_sem_key++;
+    bar_sig_key++;
+    bar_enter_key++;
+    bar_leave_key++;
+}')
+
+define(BAREXCLUDE, `{;}')
+
+define(BARINCLUDE, `{;}')
+
+define(GSDEC, `long ($1);')
+define(GSINIT, `{ ($1) = 0; }')
+define(GETSUB, `{
+  if (($1)<=($3))
+    ($2) = ($1)++;
+  else {
+    ($2) = -1;
+    ($1) = 0;
+  }
+}')
+
+define(NU_GSDEC, `long ($1);')
+define(NU_GSINIT, `{ ($1) = 0; }')
+define(NU_GETSUB, `GETSUB($1,$2,$3,$4)')
+
+define(ADEC, `long ($1);')
+define(AINIT, `{;}')
+define(PROBEND, `{;}')
+
+define(LOCKDEC, `int ($1);')
+define(LOCKINIT, `{
+    int id;
+    union semun semun;
+    if (lock_key >= LOCK_KEY + KEY_MAX) {
+        splash_log("lockinit failed\n");
+        exit(-1);
+    }
+    id = semget(lock_key, 1, DIPC_FLAGS);
+    if (id < 0) {
+        splash_log("lockinit failed\n");
+        exit(-1);
+    }
+    semun.val = 1;
+    if (semctl(id, 0, SETVAL, semun) < 0){
+        splash_log("lockinit failed\n");
+        exit(-1);
+    }
+    ($1) = lock_key;
+    map[lock_key] = id;
+    lock_key++;
+}')
+define(LOCK, `{
+	struct sembuf down;
+	splash_log("lock:key=%d\n", $1);
+	if ($1 < LOCK_KEY || $1 >= LOCK_KEY + KEY_MAX) {
+        splash_log("lock failed\n");
+        exit(-1);
+    }
+	memset(&down, 0, sizeof(struct sembuf));
+	down.sem_op = -1;
+	if (semop(map[$1], &down, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+define(UNLOCK, `{
+	struct sembuf up;
+	splash_log("unlock:key=%d\n", $1);
+	if ($1 < LOCK_KEY || $1 >= LOCK_KEY + KEY_MAX) {
+        splash_log("lock failed\n");
+        exit(-1);
+    }
+	memset(&up, 0, sizeof(struct sembuf));
+	up.sem_op = 1;
+	if (semop(map[$1], &up, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+
+define(NLOCKDEC, `long ($1);')
+define(NLOCKINIT, `{;}')
+define(NLOCK, `{;}')
+define(NUNLOCK, `{;}')
+
+define(ALOCKDEC, `int $1[$2];')
+define(ALOCKINIT, `{
+	unsigned long	i;
+	union semun semun;
+	semun.val = 1;
+	for (i = 0; i < $2; i++) {
+		int id;
+		if (alock_key >= ALOCK_KEY + KEY_MAX) {
+			splash_log("failed to create alock\n");
+			exit(-1);
+		}
+		id = semget(alock_key, 1, DIPC_FLAGS);
+	    if (id < 0) {
+	        splash_log("failed to create alock\n");
+	        exit(-1);
+	    }
+		if (semctl(id, 0, SETVAL, semun) < 0) {
+	        splash_log("failed to initialize lock\n");
+	        exit(-1);
+	    }
+	    map[alock_key] = id;
+	    $1[i] = alock_key;
+	    alock_key++;
+	}
+}')
+define(ALOCK, `{
+	struct sembuf down;
+	if ($1[$2] < ALOCK_KEY || $1[$2] >= ALOCK_KEY + KEY_MAX) {
+        splash_log("alock failed\n");
+        exit(-1);
+    }
+	memset(&down, 0, sizeof(struct sembuf));
+	down.sem_op = -1;
+	if (semop(map[$1[$2]], &down, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+define(AULOCK, `{
+	struct sembuf up;
+	if ($1[$2] < ALOCK_KEY || $1[$2] >= ALOCK_KEY + KEY_MAX) {
+        splash_log("alock failed\n");
+        exit(-1);
+    }
+	memset(&up, 0, sizeof(struct sembuf));
+	up.sem_op = 1;
+	if (semop(map[$1[$2]], &up, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+
+define(PAUSEDEC, `struct {
+	int pau_x;
+	int pau_y;
+} ($1);')
+
+define(PAUSEINIT, `{
+	int id;
+	union semun semun;
+	semun.val = 1;
+	if (pau_x_key >= PAU_X_KEY + KEY_MAX) {
+		splash_log("pauseinit failed\n");
+		exit(-1);
+	}
+	id = semget(pau_x_key, 1, DIPC_FLAGS);
+	if (id < 0) {
+	    splash_log("pauseinit failed\n");
+	    exit(-1);
+	}
+	if (semctl(id, 0, SETVAL, semun) < 0) {
+	    splash_log("failed to create pause\n");
+	    exit(-1);
+	}
+	map[pau_x_key] = id;
+	
+	if (pau_y_key >= PAU_Y_KEY + KEY_MAX) {
+		splash_log("pauseinit failed\n");
+		exit(-1);
+	}
+	id = semget(pau_y_key, 1, DIPC_FLAGS);
+	if (id < 0) {
+	    splash_log("pauseinit failed\n");
+	    exit(-1);
+	}
+	if (semctl(id, 0, SETVAL, semun) < 0) {
+	    splash_log("failed to create pause\n");
+	    exit(-1);
+	}
+	map[pau_y_key] = id;
+	splash_log("pauseinit: pau_x=%d, pau_y=%d\n", pau_x_key, pau_y_key);
+	($1).pau_x = pau_x_key;
+	($1).pau_y = pau_y_key;
+	pau_x_key++;
+	pau_y_key++;
+}')
+define(CLEARPAUSE, `{
+	union semun semun;
+	int pau_x = map[($1).pau_x];
+	int pau_y = map[($1).pau_y];
+	struct sembuf sembuf;
+	memset(&sembuf, 0, sizeof(struct sembuf));
+	sembuf.sem_op = -1;
+	splash_log("clearpause: pau_x=%d, pau_y=%d\n", ($1).pau_x, ($1).pau_y);
+	if (semop(pau_x, &sembuf, 1) < 0)  {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+	semun.val = 1;
+    if (semctl(pau_y, 0, SETVAL, semun) < 0) {
+        splash_log("setpause failed\n");
+        exit(-1);
+    }
+    sembuf.sem_op = 1;
+    if (semop(pau_x, &sembuf, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+define(SETPAUSE, `{
+	union semun semun;
+	int pau_x = map[($1).pau_x];
+	int pau_y = map[($1).pau_y];
+	struct sembuf sembuf;
+	memset(&sembuf, 0, sizeof(struct sembuf));
+	sembuf.sem_op = -1;
+	splash_log("setpause: pau_x=%d, pau_y=%d\n", ($1).pau_x, ($1).pau_y);
+	if (semop(pau_x, &sembuf, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+	semun.val = 0;
+    if (semctl(pau_y, 0, SETVAL, semun) < 0) {
+        splash_log("setpause failed\n");
+        exit(-1);
+    }
+    sembuf.sem_op = 1;
+    if (semop(pau_x, &sembuf, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+}')
+define(EVENT, `{;}')
+define(WAITPAUSE, `{
+	int pau_y = map[($1).pau_y];
+	struct sembuf wait;
+    splash_log("waitpause: pau_x=%d, pau_y=%d\n", ($1).pau_x, ($1).pau_y);
+	memset(&wait, 0, sizeof(struct sembuf));
+	if (semop(pau_y, &wait, 1) < 0) {
+		splash_log("semop failed\n");
+		exit(-1);
+	}
+	splash_log("waitpause: passed, pau_x=%d, pau_y=%d\n", ($1).pau_x, ($1).pau_y);
+}')
+define(PAUSE, `{;}')
+
+define(AUG_ON, ` ')
+define(AUG_OFF, ` ')
+define(TRACE_ON, ` ')
+define(TRACE_OFF, ` ')
+define(REF_TRACE_ON, ` ')
+define(REF_TRACE_OFF, ` ')
+define(DYN_TRACE_ON, `;')
+define(DYN_TRACE_OFF, `;')
+define(DYN_REF_TRACE_ON, `;')
+define(DYN_REF_TRACE_OFF, `;')
+define(DYN_SIM_ON, `;')
+define(DYN_SIM_OFF, `;')
+define(DYN_SCHED_ON, `;')
+define(DYN_SCHED_OFF, `;')
+define(AUG_SET_LOLIMIT, `;')
+define(AUG_SET_HILIMIT, `;')
+
+define(MENTER, `{;}')
+define(DELAY, `{;}')
+define(CONTINUE, `{;}')
+define(MEXIT, `{;}')
+define(MONINIT, `{;}')
+
+define(WAIT_FOR_END, `{
+	FILE *fp;
+	fflush(stdout);
+	fp = fopen("/var/start/wait", "w");
+	fclose(fp);
+	while (!access("/var/start/wait", F_OK))
+		sleep(1);
+}')
+define(CREATE, `{
+	int i;
+	int id;
+	int key = SEM_PRIVATE_KEY;
+	union semun semun;
+	splash_log("CRATE: start\n");
+	if (($2) > MAX_THREADS) {
+	    splash_log("Too much threads\n");
+	    exit(-1);
+	}
+	id = semget(SEM_CHECK_KEY, 1, DIPC_FLAGS);
+	if (id < 0) {
+	    splash_log("failed to create sem_check\n");
+	    exit(-1);
+	}
+	splash_log("step 1\n");
+	semun.val = 1;
+	if (semctl(id, 0, SETVAL, semun) < 0) {
+	    splash_log("failed to set sem_check\n");
+	    exit(-1);
+	}
+	splash_log("step 2\n");
+	for (i = 0; i < ($2); i++) {
+		if (semget(key, 1, DIPC_FLAGS | IPC_EXCL) >= 0) {
+			node_id = i + 1;
+			if (i == ($2) - 1) {
+				struct sembuf down;
+				memset(&down, 0, sizeof(struct sembuf));
+				down.sem_op = -1;
+				//printf("continue\n");
+				if (semop(id, &down, 1) < 0) {
+					splash_log("semop failed\n");
+					return 0;
+				}
+			} else {
+				struct sembuf wait;
+				memset(&wait, 0, sizeof(struct sembuf));
+				//printf("waiting...\n");
+				if (semop(id, &wait, 1) < 0) {
+					splash_log("semop failed\n");
+					exit(-1);
+				}
+			}
+			break;
+		}
+		key++;
+	}
+	//splash_log("CRATE: corrdinated\n");
+	$1();
+}')
+
+define(MAIN_INITENV, `{;}')
+define(MAIN_END, `{	
+	FILE *fp;
+	fflush(stdout);
+	fp = fopen("/var/start/finish", "w");
+	fclose(fp);
+	while (!access("/var/start/finish", F_OK))
+		sleep(1);
+}')
+
+define(MAIN_ENV,`
+#define _GNU_SOURCE
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#define MAX_THREADS 128
+#define SEM_CHECK_KEY  100
+#define PAU_X_KEY 128
+#define PAU_Y_KEY 256
+#define BAR_SEM_KEY 384
+#define BAR_SIG_KEY 512
+#define BAR_ENTER_KEY 640
+#define BAR_LEAVE_KEY 768
+#define LOCK_KEY  896
+#define ALOCK_KEY 1024
+#define SEM_PRIVATE_KEY	1152
+#define MEM_KEY	  1280
+#define KEY_MAX   128
+#define IPC_DIPC	00010000
+#define DIPC_FLAGS  IPC_DIPC | IPC_CREAT | 0777
+//#define DEBUG_MODE
+int lock_key = LOCK_KEY;
+int alock_key = ALOCK_KEY;
+int bar_sem_key = BAR_SEM_KEY;
+int bar_sig_key = BAR_SIG_KEY;
+int bar_enter_key = BAR_ENTER_KEY;
+int bar_leave_key = BAR_LEAVE_KEY;
+int pau_x_key = PAU_X_KEY;
+int pau_y_key = PAU_Y_KEY;
+int mem_key = MEM_KEY;
+int node_id;
+int map[2048];
+#ifndef SEMUN
+#define SEMUN
+union semun {
+	int val;                /* value for SETVAL */
+	struct semid_ds *buf;   /* buffer for IPC_STAT & IPC_SET */
+	unsigned short *array;          /* array for GETALL & SETALL */
+	struct seminfo *__buf;  /* buffer for IPC_INFO */
+};
+#endif
+
+#ifdef DEBUG_MODE
+#define splash_log printf
+#else
+#define splash_log(...) do {} while (0)
+#endif
+
+#ifndef SHMALLOC
+#define SHMALLOC
+static inline void *shmalloc(unsigned long size)
+{
+	void *buf;
+	int shmid;
+	if (mem_key >= MEM_KEY + KEY_MAX) {
+		splash_log("failed to allocate memory (invalid key)\n");
+		exit(-1);
+	}
+	size = (size + 7) / 8 * 8;
+	shmid = shmget(mem_key, size, DIPC_FLAGS);
+	if (shmid < 0) {
+		splash_log("failed to allocate memory (invalid shmid)\n");
+		exit(-1);
+	}
+	buf = shmat(shmid, NULL, 0);
+	if ((buf == (void *)-1) || !buf) {
+		splash_log("failed to allocate memory (invalid pointer)\n");
+		exit(-1);
+	}
+	//memset(buf, 0, size);
+	map[mem_key] = shmid;
+	mem_key++;
+	return buf;
+}
+#endif
+')
+
+define(ENV, `')
+define(EXTERN_ENV, `
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#define MAX_THREADS 128
+#define SEM_CHECK_KEY  100
+#define PAU_X_KEY 128
+#define PAU_Y_KEY 256
+#define BAR_SEM_KEY 384
+#define BAR_SIG_KEY 512
+#define BAR_ENTER_KEY 640
+#define BAR_LEAVE_KEY 768
+#define LOCK_KEY  896
+#define ALOCK_KEY 1024
+#define SEM_PRIVATE_KEY	1152
+#define MEM_KEY	  1280
+#define KEY_MAX   128
+#define IPC_DIPC	00010000
+#define DIPC_FLAGS  IPC_DIPC | IPC_CREAT | 0777
+//#define DEBUG_MODE
+extern int map[];
+extern int lock_key;
+extern int alock_key;
+extern int bar_sem_key;
+extern int bar_sig_key;
+extern int bar_enter_key;
+extern int bar_leave_key;
+extern int pau_x_key;
+extern int pau_y_key;
+extern int mem_key;
+extern int node_id;
+#ifndef SEMUN
+#define SEMUN
+union semun {
+	int val;                /* value for SETVAL */
+	struct semid_ds *buf;   /* buffer for IPC_STAT & IPC_SET */
+	unsigned short *array;          /* array for GETALL & SETALL */
+	struct seminfo *__buf;  /* buffer for IPC_INFO */
+};
+#endif
+
+#ifndef SHMALLOC
+#define SHMALLOC
+static inline void *shmalloc(unsigned long size)
+{
+	void *buf;
+	int shmid;
+	if (mem_key >= MEM_KEY + KEY_MAX) {
+		splash_log("failed to allocate memory (invalid key)\n");
+		exit(-1);
+	}
+	size = (size + 7) / 8 * 8;
+	shmid = shmget(mem_key, size, DIPC_FLAGS);
+	if (shmid < 0) {
+		splash_log("failed to allocate memory (invalid shmid)\n");
+		exit(-1);
+	}
+	buf = shmat(shmid, NULL, 0);
+	if ((buf == (void *)-1) || !buf) {
+		splash_log("failed to allocate memory (invalid pointer)\n");
+		exit(-1);
+	}
+	//memset(buf, 0, size);
+	map[mem_key] = shmid;
+	mem_key++;
+	return buf;
+}
+#endif
+')
+
+define(G_MALLOC, `shmalloc($1);')
+define(G_FREE, `;')
+define(G_MALLOC_F, `;')
+define(NU_MALLOC, `;')
+define(NU_FREE, `;')
+define(NU_MALLOC_F, `;')
+
+define(GET_HOME, `{($1) = 0;}')
+define(GET_PID, `{($1) = 0;}')
+define(AUG_DELAY, `{sleep ($1);}')
+define(ST_LOG, `{;}')
+define(SET_HOME, `{;}')
+define(CLOCK, `{
+	struct timeval time;
+	gettimeofday(&time, NULL);
+	($1) = (unsigned long)(time.tv_usec + time.tv_sec * 1000000);
+}')
+divert(0)
