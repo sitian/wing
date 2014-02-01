@@ -158,7 +158,6 @@ class WMDRec(object):
     def _check(self, addr, index):
         if self._stat.has_key(addr):
             if not self.is_active(addr):
-                log(self, 'failed to check (invalid addr)')
                 return -1
         else:
             self.mkactive(addr)
@@ -168,7 +167,7 @@ class WMDRec(object):
         if not src:
             self._peers.update({identity:addr})
         elif src != addr:
-            log_err(self, 'failed to check (invalid identity)')
+            log_err(self, 'failed to check')
             return -1
         
         self._lst.update({addr:index})
@@ -186,7 +185,7 @@ class WMDRec(object):
         if cmd:
             return cmd[WMD_REC_CMD]
         
-    def _new_rec(self, index, orig):
+    def _new(self, index, orig):
         return [index, [], orig, False]
     
     def add(self, addr, index, cmd):
@@ -198,9 +197,9 @@ class WMDRec(object):
         if not recycled:
             if self._rec.has_key(addr):
                 if index not in (item[WMD_REC_IDX] for item in self._rec[addr]):
-                    self._rec[addr].append(self._new_rec(index, orig))
+                    self._rec[addr].append(self._new(index, orig))
             else:
-                self._rec.update({addr:[self._new_rec(index, orig)]})
+                self._rec.update({addr:[self._new(index, orig)]})
         
         self._chkcmd(addr, orig, command)
         
@@ -237,9 +236,6 @@ class WMDRec(object):
                         sn_max = sn
         if chk and sn_max - sn_min >= WMD_REC_OFFSET:
             return addr
-    
-    def chkavailable(self):
-        return self._available
     
     def chkidle(self):
         return self._available - len(self._active)

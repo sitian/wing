@@ -123,7 +123,6 @@ class WMDSub(WMDIndex, Thread):
                 sock = context.socket(zmq.REQ)
                 sock.connect(zmqaddr(self._ip, WMD_HEARTBEAT_PORT))
             return (context, sock)
-        
     
     def _start_heartbeat(self):
         context = zmq.Context()

@@ -137,8 +137,6 @@ class WMDIndex(object):
             return (None, None) 
     
     def idxrcv(self, sock):
-        cmd = None
-        index = None
         while True:
             self.__lock.acquire()
             try:
@@ -152,6 +150,7 @@ class WMDIndex(object):
                     try:
                         index, cmd = self._idxrcv(sock)
                     except:
+                        log_err(self, 'failed to receive')
                         raise Exception(log_get(self, 'failed to receive'))
                     finally:
                         self.__lock.acquire()
@@ -169,4 +168,4 @@ class WMDIndex(object):
                         self.__que.update({sn:(index, cmd)})
             finally:
                 self.__lock.release()
-        
+                    
