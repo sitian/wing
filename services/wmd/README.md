@@ -53,11 +53,11 @@ Testing
 path/to/tests/mds/cfg
 
 ####Example
-**client1@192.168.1.101**
+**client1@192.168.1.101:**
 path/to/tests/mds/bench.py
 
-**client2@192.168.1.102**
+**client2@192.168.1.102:**
 path/to/tests/mds/bench.py
 
-**client3@192.168.1.103**
+**client3@192.168.1.103:**
 path/to/tests/mds/bench.py
