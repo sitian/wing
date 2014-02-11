@@ -85,7 +85,13 @@ class WMDQue(object):
             self._show_min()
             self._show_head()
             self._show_cand()
-              
+    
+    def _log(self, s, que=None):
+        name = 'que'
+        if que:
+            name += '.' + str(que)
+        log_file(self, name, str(s))
+             
     def _hit(self, index):
         if not self._cnt.has_key(index):
             log_err(self, 'failed to hit (no index)')
@@ -130,13 +136,12 @@ class WMDQue(object):
                 self._que.update({addr:[index]})
             else:
                 self._que[addr].append(index)
-            log_file(self, 'que.' + str(addr), index)
+            self._log(index, addr)
         except:
             log_err(self, 'failed to append, addr=%s' % net.ntoa(addr))
             raise Exception(log_get(self, 'failed to append'))
     
     def add(self, addr, index, cmd):
-        log_file(self, addr, index)
         cmds = self._rec.add(addr, index, cmd)
         if cmds:
             for item in cmds:
@@ -195,7 +200,7 @@ class WMDQue(object):
         return cnt + self._hits[index] + self._rec.chkidle()
     
     def _is_safe(self, index):
-        if self._hits[index] == self._rec.chkavailable():
+        if self._hits[index] == self._total:
             return True
         
         count = 0
@@ -206,17 +211,12 @@ class WMDQue(object):
                     if count == self._quorum:
                         return True
         
-        count = 0
         checked = []
         self._show_stat()
         for i in self._que:
             chk = False
             if len(self._que[i]) > 0: 
-                if index == self._que[i][0]:
-                    count += 1
-                    if count == self._quorum:
-                        return True
-                else:
+                if index != self._que[i][0]:
                     for n in self._que[i]:
                         if n == index:
                             chk = True
@@ -237,19 +237,22 @@ class WMDQue(object):
                     return True
         return False
     
-    def _choose(self):
+    def _pop(self):
         if len(self._cand) > 0:
             index = self._cand[0]
             if self._is_safe(index):
                 cmd = self._rec.get_cmd(index)
-                log_file(self, 'cmd', index)
+                if not cmd:
+                    log_err(self, 'failed to get command')
+                    raise Exception(log_get(self, 'failed to get command'))
                 del self._cand[0]
                 self._remove(index)
+                self._log(index)
                 return (index, cmd)
         return (None, None)
     
-    def choose(self):
-        return self._choose()
+    def pop(self):
+        return self._pop()
     
     def chklst(self, addr):
         return self._rec.chklst(addr)

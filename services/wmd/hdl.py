@@ -18,24 +18,33 @@
 #      MA 02110-1301, USA.
 
 import sys
-
+from datetime import datetime
 sys.path.append('../../lib')
 from log import log
 
-WMD_HDL_CHK_INTERVAL = 16
-WMD_HDL_SHOW_CNT = False
+WMD_HDL_CHK_INTERVAL = 400
+WMD_HDL_SHOW_SPEED = True
 
 class WMDHdl(object):
     def __init__(self):
         self._cnt = 0
+        self._start_time = None
     
-    def _show_cnt(self):
-        if WMD_HDL_SHOW_CNT:
+    def _show_speed(self):
+        if WMD_HDL_SHOW_SPEED:
             if self._cnt % WMD_HDL_CHK_INTERVAL == 0:
-                log(self, 'cnt=%d' % self._cnt)
-            
-    def proc(self, cmd):
+                d = datetime.now() - self._start_time
+                t = d.seconds + d.microseconds / 1000000.0
+                if t > 0:
+                    log(self, 'cps=%d' % int(self._cnt / t))
+    
+    def _calc_speed(self):
+        if self._cnt == 0:
+            self._start_time = datetime.now()
         self._cnt += 1
-        self._show_cnt()
+        self._show_speed()
+        
+    def proc(self, cmd):
+        self._calc_speed()
         
     

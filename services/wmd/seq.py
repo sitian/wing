@@ -60,16 +60,6 @@ class WMDSeq(WMDReg):
         self._pub = WMDPub(ip, WMD_SEQ_PORT, idx.idxgen(identity=self.identity))
         self._pub.register(sub, heartbeat=True)
     
-    def _recv(self, addr):
-        try:
-            if WMD_SEQ_CHK_SLOW:
-                self._cmd.chkslow()
-            return self._sub[addr].recv()
-        except:
-            log_err(self, 'failed to receive, %s' % net.ntoa(addr))
-            self._stop_sub(addr)
-            raise Exception(log_get(self, 'failed to receive'))
-    
     def _wrapper(self, track, index, cmd):
         new_index = self._pub.idxget()
         new_cmd = pack(track, index, cmd)
@@ -87,6 +77,16 @@ class WMDSeq(WMDReg):
         finally:
             self._lock.release()
     
+    def _recv(self, addr):
+        try:
+            if WMD_SEQ_CHK_SLOW:
+                self._cmd.chkslow()
+            return self._sub[addr].recv()
+        except:
+            log_err(self, 'failed to receive, %s' % net.ntoa(addr))
+            self._stop_sub(addr)
+            raise Exception(log_get(self, 'failed to receive'))
+    
     def _can_start(self):
         while not self._pub:
             time.sleep(1)
@@ -95,17 +95,15 @@ class WMDSeq(WMDReg):
     def _proc(self, addr):
         if self._can_start():
             while True:
-                index, cmd = self._recv(addr)
-                self._forward(index, cmd)
-    
+                self._forward(*self._recv(addr))
+                
     def update(self, cmd):
-        track, orig_index, orig_cmd = unpack(cmd)
-        identity = idx.idxid(orig_index)
+        track, orig, command = unpack(cmd)
+        identity = idx.idxid(orig)
         addr = self._sub_addr.get(identity)
         if not addr or not self._sub.has_key(addr):
             log_err(self, 'failed to update (no subscriber)')
             raise Exception(log_get(self, 'failed to update'))
-        
-        if self._sub[addr].idxnxt(orig_index, orig_cmd):
-            self._forward(orig_index, orig_cmd)
+        if self._sub[addr].idxnxt(orig, command):
+            self._forward(orig, command)
         

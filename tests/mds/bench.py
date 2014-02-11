@@ -82,7 +82,7 @@ def join(addr):
             ret = False
             break
         if res['cmd'] == CMD_OK:
-            print 'Join=>finish, @%s' % addr
+            print 'Join=>finish'
             break
         elif res['cmd'] != CMD_RETRY:
             print 'Invalid command'

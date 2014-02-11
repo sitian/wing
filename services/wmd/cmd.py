@@ -119,8 +119,8 @@ class WMDCmd(WMDRep):
                 if addr and addr != self._addr:
                     self._event.clear()
         except:
-            log_err(self, 'failed to check offset')
-            raise Exception(log_get(self, 'failed to check offset'))
+            log_err(self, 'chkslow failed')
+            raise Exception(log_get(self, 'chkslow failed'))
         finally:
             self._lock.release()
         
@@ -130,7 +130,7 @@ class WMDCmd(WMDRep):
     def pop(self):
         self._lock.acquire()
         try:
-            index, cmd = self._que.choose()
+            index, cmd = self._que.pop()
             if index and not self._event.is_set():
                 addr = self._que.chkslow()
                 if not addr or addr == self._addr:

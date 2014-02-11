@@ -28,7 +28,7 @@ from default import WMD_MIX_PORT
 from log import log, log_err, log_get
 import net
 
-WMD_MIX_SHOW_POP = True
+WMD_MIX_SHOW_POP = False
 WMD_MIX_SHOW_RECV = False
 
 class WMDMix(WMDReg):
@@ -55,7 +55,7 @@ class WMDMix(WMDReg):
     def _live(self, addr):
         self._cmd.mkactive(addr)
         
-    def _deliver(self, addr, index, cmd):
+    def _add(self, addr, index, cmd):
         self._cmd.add(addr, index, cmd)
         self._seq.update(cmd)
         
@@ -63,11 +63,11 @@ class WMDMix(WMDReg):
         self._lock.acquire()
         try:
             while True:
-                orig_index, orig_cmd = self._cmd.pop()
-                if not orig_index:
+                index, cmd = self._cmd.pop()
+                if not index:
                     break
-                self._hdl.proc(orig_cmd)
-                self._show_pop(orig_index)
+                self._hdl.proc(cmd)
+                self._show_pop(index)
         except:
             log_err(self, 'failed to pop')
             raise Exception(log_get(self, 'failed to pop'))
@@ -86,6 +86,6 @@ class WMDMix(WMDReg):
     def _proc(self, addr):
         while True:
             index, cmd = self._recv(addr)
-            self._deliver(addr, index, cmd)
+            self._add(addr, index, cmd)
             self._pop()
     

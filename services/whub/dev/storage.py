@@ -17,23 +17,23 @@
 #      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #      MA 02110-1301, USA.
 
-from util import ofs
+from util import wofs
 from device import WHubDev
 
 class Storage(WHubDev):
     def register(self, name):
-        ofs.create(name)
+        wofs.create(name)
         return True
     
     def unregister(self, name):
-        ofs.destroy(name)
+        wofs.destroy(name)
         return True
     
     def mount(self, name):
-        ofs.start(name)
+        wofs.start(name)
         return True
     
     def unmount(self, name):
-        ofs.stop(name)
+        wofs.stop(name)
         return True
     
