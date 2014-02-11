@@ -1,6 +1,5 @@
 WMD
----
----
+===
 Yi-Wei Ci &lt;ciyiwei@hotmail.com&gt;  
 v0.0.1
 
@@ -12,17 +11,20 @@ A Meta-Data Service Using Index-Based Consensus
 Implementations
 ---------------
 **Generator:**	gen.py
+
 **Sequencer:**	seq.py
+
 **Mixer:**	mix.py
 
 Configuration
 -------------
-### /etc/default/wing
+**/etc/default/wing**
+
 MDS_MAX=3
 
 Quick Start
 -----------
-### Clients
+#### Clients
 **client1@192.168.1.101:**
 path/to/wmd/gen.py 192.168.1.101
 
@@ -32,7 +34,7 @@ path/to/wmd/gen.py 192.168.1.102
 **client3@192.168.1.103:**
 path/to/wmd/gen.py 192.168.1.103
 
-### Servers
+#### Servers
 **server1@192.168.1.1:**
 path/to/wmd/mds.py 192.168.1.1
 
@@ -44,13 +46,13 @@ path/to/wmd/mds.py 192.168.1.3
 
 Testing
 -------
-###Download
+####Download
 <https://github.com/sitian/wing/tree/master/tests/mds>
 
-###Configuration
+####Configuration
 path/to/tests/mds/cfg
 
-###Example
+####Example
 **client1@192.168.1.101**
 path/to/tests/mds/bench.py
 
